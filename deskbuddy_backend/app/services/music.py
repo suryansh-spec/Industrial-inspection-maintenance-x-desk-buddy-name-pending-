@@ -214,12 +214,10 @@ class MusicController:
             else:
                 smtc_status = self._status
             
-            # Interpolate progress for backgrounded tabs (SMTC position freezes)
-            # Only interpolate if SMTC position hasn't changed since last read
-            # Interpolate even if SMTC reports paused (backgrounded tabs)
-            if smtc_status.duration_ms > 0:
+            # Interpolate progress for backgrounded tabs (SMTC position freezes).
+            # Only interpolate while actually playing; never advance when paused.
+            if smtc_status.duration_ms > 0 and smtc_status.playing:
                 elapsed_ms = int((time.monotonic() - self._last_smtc_read_time) * 1000)
-                # If SMTC position is frozen (same as anchor), interpolate
                 if smtc_status.progress_ms == self._last_smtc_position_ms and elapsed_ms > 0 and self._last_smtc_position_ms > 0:
                     estimated = self._last_smtc_position_ms + elapsed_ms
                     if estimated < smtc_status.duration_ms:
@@ -241,9 +239,9 @@ class MusicController:
         elif self._provider in ["windows_media", "wmp"]:
             status = self._get_windows_status()
             # Interpolate progress for backgrounded tabs (SMTC position freezes)
-            if status.duration_ms > 0:
+            # Only interpolate while actually playing.
+            if status.duration_ms > 0 and status.playing:
                 elapsed_ms = int((time.monotonic() - self._last_smtc_read_time) * 1000)
-                # Only interpolate if SMTC position hasn't changed (frozen)
                 if status.progress_ms == self._last_smtc_position_ms and elapsed_ms > 0 and self._last_smtc_position_ms > 0:
                     estimated = self._last_smtc_position_ms + elapsed_ms
                     if estimated < status.duration_ms:
@@ -307,13 +305,14 @@ class MusicController:
                 # Track last known position for interpolation
                 import time
                 now = time.monotonic()
+                import time as _t
+                now = _t.monotonic()
                 if progress_ms > 0:
-                    # Only update anchor if position changed (not frozen)
+                    # Always refresh the read time so interpolation elapsed
+                    # stays small even when the SMTC position is frozen.
                     if progress_ms != self._last_smtc_position_ms:
                         self._last_smtc_position_ms = progress_ms
-                        self._last_smtc_read_time = now
-                    elif self._last_smtc_read_time == 0:
-                        self._last_smtc_read_time = now
+                    self._last_smtc_read_time = now
                 
                 return {
                     "title": info.title,
