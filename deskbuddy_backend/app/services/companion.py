@@ -683,7 +683,7 @@ class CompanionService:
             "env_h": _round_or(environment.get("humidity"), -999),
             "env_p": _round_or(environment.get("pressure"), -999),
             "batt": battery_pct,
-            "batt_v": round(float(device.get("battery_voltage") or 0.0), 2),
+            "batt_v": round(float(device.get("battery_voltage") or 0.0), 1),
             "batt_chg": battery_charging,
             "mic": mic_level,
             "unread": int(summary["unread"]),
