@@ -84,6 +84,7 @@ class MusicController:
         # Play/pause debounce: track intended state for a few seconds after a command
         self._intended_playing: Optional[bool] = None
         self._intended_until: float = 0.0
+        self._explicitly_paused: bool = False
         # Progress interpolation for backgrounded tabs
         self._last_smtc_position_ms: int = 0
         self._last_smtc_read_time: float = 0.0
@@ -218,9 +219,18 @@ class MusicController:
             else:
                 smtc_status = self._status
             
+            # Determine playing state: intended override, or heuristic for
+            # backgrounded tabs (SMTC reports paused but track is still going).
+            if self._intended_playing is not None:
+                _is_playing = self._intended_playing
+            else:
+                _session_alive = bool(smtc_status.title) and smtc_status.duration_ms > 0
+                _not_ended = smtc_status.progress_ms < smtc_status.duration_ms
+                _is_playing = (not self._explicitly_paused) and (
+                    smtc_status.playing or (_session_alive and _not_ended)
+                )
+            smtc_status.playing = _is_playing
             # Interpolate progress for backgrounded tabs (SMTC position freezes).
-            # Use intended playing state so backgrounded tabs still advance.
-            _is_playing = self._intended_playing if self._intended_playing is not None else smtc_status.playing
             if smtc_status.duration_ms > 0 and _is_playing:
                 elapsed_ms = int((time.monotonic() - self._last_smtc_read_time) * 1000)
                 if smtc_status.progress_ms == self._last_smtc_position_ms and elapsed_ms > 0 and self._last_smtc_position_ms > 0:
@@ -427,6 +437,7 @@ class MusicController:
         import time
         self._intended_playing = True
         self._intended_until = time.monotonic() + 30.0
+        self._explicitly_paused = False
         self._emit("play", {})
     
     async def _play_windows(self):
@@ -473,6 +484,7 @@ class MusicController:
         import time
         self._intended_playing = False
         self._intended_until = time.monotonic() + 30.0
+        self._explicitly_paused = True
         self._emit("pause", {})
     
     async def _pause_windows(self):
