@@ -202,6 +202,10 @@ class MusicController:
         # If an intended play/pause state is set, fetch SMTC status but
         # override the playing field. Clear the override only when SMTC
         # agrees (so backgrounded tabs don't revert the UI).
+        import time as _t
+        # Clear the override only when SMTC agrees, or after a long safety timeout.
+        if self._intended_playing is not None and _t.monotonic() > self._intended_until:
+            self._intended_playing = None
         if self._intended_playing is not None:
             if self._provider in ["windows_media", "wmp"]:
                 smtc_status = self._get_windows_status()
@@ -215,8 +219,9 @@ class MusicController:
                 smtc_status = self._status
             
             # Interpolate progress for backgrounded tabs (SMTC position freezes).
-            # Only interpolate while actually playing; never advance when paused.
-            if smtc_status.duration_ms > 0 and smtc_status.playing:
+            # Use intended playing state so backgrounded tabs still advance.
+            _is_playing = self._intended_playing if self._intended_playing is not None else smtc_status.playing
+            if smtc_status.duration_ms > 0 and _is_playing:
                 elapsed_ms = int((time.monotonic() - self._last_smtc_read_time) * 1000)
                 if smtc_status.progress_ms == self._last_smtc_position_ms and elapsed_ms > 0 and self._last_smtc_position_ms > 0:
                     estimated = self._last_smtc_position_ms + elapsed_ms
@@ -421,7 +426,7 @@ class MusicController:
         self._status.playing = True
         import time
         self._intended_playing = True
-        self._intended_until = time.monotonic() + 5.0
+        self._intended_until = time.monotonic() + 30.0
         self._emit("play", {})
     
     async def _play_windows(self):
@@ -467,7 +472,7 @@ class MusicController:
         self._status.playing = False
         import time
         self._intended_playing = False
-        self._intended_until = time.monotonic() + 5.0
+        self._intended_until = time.monotonic() + 30.0
         self._emit("pause", {})
     
     async def _pause_windows(self):
