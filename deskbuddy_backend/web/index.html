@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>DeskBuddy Control Panel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <script src="https://cdn.tailwindcss.com"></script>
 <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
@@ -12,25 +15,218 @@
 <script>
 tailwind.config = {
   darkMode: 'class',
-  theme: { extend: { colors: { accent: '#06b6d4' } } }
+  theme: { extend: { colors: { accent: '#06b6d4' }, fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'], mono: ['JetBrains Mono', 'Consolas', 'monospace'] } } }
 }
 </script>
 <style>
-body { background: #0f172a; color: #e2e8f0; font-family: 'Segoe UI', system-ui, sans-serif; }
-.card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 16px; transition: all 0.3s ease; }
-@keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
-.fade-in { animation: fadeIn 0.3s ease-out; }
-.btn { padding: 8px 16px; border-radius: 8px; font-weight: 500; cursor: pointer; transition: all 0.15s; }
-.btn-primary { background: #06b6d4; color: #0f172a; }
-.btn-primary:hover { background: #22d3ee; }
-.btn-secondary { background: #334155; color: #e2e8f0; }
-.btn-secondary:hover { background: #475569; }
+:root {
+  --bg: #070b14;
+  --card-bg: #111a2e;
+  --text: #e2e8f0;
+  --text-secondary: #94a3b8;
+  --border: #25324d;
+  --accent: #06b6d4;
+  --accent-rgb: 6,182,212;
+  --radius: 16px;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg); color: var(--text);
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+::selection { background: rgba(var(--accent-rgb), .35); }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: rgba(148,163,184,.25); border-radius: 8px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(var(--accent-rgb), .5); }
+
+/* ── Ambient animated background ─────────────────────── */
+.bg-layer { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
+.bg-grid {
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(rgba(148,163,184,.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148,163,184,.06) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse at 50% 30%, #000 20%, transparent 75%);
+  -webkit-mask-image: radial-gradient(ellipse at 50% 30%, #000 20%, transparent 75%);
+}
+.orb { position: absolute; border-radius: 50%; filter: blur(90px); opacity: .35; will-change: transform; }
+.orb-1 { width: 520px; height: 520px; background: rgba(var(--accent-rgb), .55); top: -160px; left: -120px; animation: drift1 22s ease-in-out infinite; }
+.orb-2 { width: 460px; height: 460px; background: #7c3aed; opacity: .25; bottom: -180px; right: -100px; animation: drift2 28s ease-in-out infinite; }
+.orb-3 { width: 340px; height: 340px; background: #ec4899; opacity: .12; top: 40%; left: 55%; animation: drift3 34s ease-in-out infinite; }
+@keyframes drift1 { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(140px,90px) scale(1.15); } }
+@keyframes drift2 { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(-160px,-80px) scale(1.1); } }
+@keyframes drift3 { 0%,100% { transform: translate(0,0); } 50% { transform: translate(-120px,100px); } }
+
+/* ── Cards ───────────────────────────────────────────── */
+.card {
+  position: relative;
+  background: color-mix(in srgb, var(--card-bg) 68%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+  border-radius: var(--radius);
+  padding: 18px;
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  box-shadow: 0 1px 0 rgba(255,255,255,.04) inset, 0 10px 30px -12px rgba(0,0,0,.5);
+  transition: transform .3s cubic-bezier(.2,.8,.2,1), border-color .3s, box-shadow .3s;
+}
+.card::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: linear-gradient(135deg, rgba(255,255,255,.06), transparent 40%);
+}
+.card:hover { border-color: rgba(var(--accent-rgb), .35); }
+.metric:hover { transform: translateY(-3px); box-shadow: 0 1px 0 rgba(255,255,255,.05) inset, 0 18px 40px -14px rgba(var(--accent-rgb), .35); }
+
+/* ── Buttons ─────────────────────────────────────────── */
+.btn {
+  position: relative; overflow: hidden;
+  padding: 8px 16px; border-radius: 10px; font-weight: 600;
+  cursor: pointer; border: 1px solid transparent;
+  transition: transform .15s, box-shadow .25s, background .2s, border-color .2s;
+}
+.btn:active { transform: scale(.95); }
+.btn::after {
+  content: ''; position: absolute; top: 0; left: -120%; width: 60%; height: 100%;
+  background: linear-gradient(100deg, transparent, rgba(255,255,255,.35), transparent);
+  transform: skewX(-20deg); transition: left .6s;
+}
+.btn:hover::after { left: 140%; }
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 60%, #8b5cf6));
+  color: #04101a; box-shadow: 0 6px 18px -6px rgba(var(--accent-rgb), .6);
+}
+.btn-primary:hover { box-shadow: 0 8px 26px -4px rgba(var(--accent-rgb), .8); transform: translateY(-1px); }
+.btn-secondary {
+  background: rgba(148,163,184,.12); color: var(--text);
+  border-color: rgba(148,163,184,.18);
+}
+.btn-secondary:hover { background: rgba(var(--accent-rgb), .15); border-color: rgba(var(--accent-rgb), .4); transform: translateY(-1px); }
 .btn-danger { background: #ef4444; color: white; }
-.tab-active { border-bottom: 2px solid #06b6d4; color: #06b6d4; }
-.mono { font-family: 'Consolas', 'Courier New', monospace; }
+
+/* ── Form controls ───────────────────────────────────── */
+input:not([type=checkbox]):not([type=color]):not([type=range]):not([type=file]), select, textarea {
+  background: rgba(15,23,42,.55) !important;
+  border: 1px solid rgba(148,163,184,.2) !important;
+  border-radius: 10px !important;
+  color: var(--text) !important;
+  transition: border-color .2s, box-shadow .2s;
+  outline: none;
+}
+input:focus, select:focus, textarea:focus {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), .2);
+}
+input[type=checkbox], input[type=range] { accent-color: var(--accent); }
+input[type=color] { border: none; background: none; padding: 0; }
+input[type=file]::file-selector-button {
+  background: rgba(var(--accent-rgb), .18); color: var(--accent); border: none;
+  padding: 6px 12px; border-radius: 8px; margin-right: 10px; cursor: pointer; font-weight: 600;
+  transition: background .2s;
+}
+input[type=file]::file-selector-button:hover { background: rgba(var(--accent-rgb), .3); }
+table th { font-weight: 600; font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; }
+tbody tr { transition: background .2s; }
+tbody tr:hover { background: rgba(var(--accent-rgb), .06); }
+
+.mono { font-family: 'JetBrains Mono', Consolas, monospace; }
+.gradient-text {
+  background: linear-gradient(90deg, #fff, var(--accent) 60%, #a78bfa);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  background-size: 200% auto; animation: shine 6s linear infinite;
+}
+@keyframes shine { to { background-position: 200% center; } }
+
+/* ── Entrance animations ─────────────────────────────── */
+@keyframes pageIn { from { opacity: 0; transform: translateY(14px) scale(.995); } to { opacity: 1; transform: none; } }
+@keyframes cardIn { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+.page-enter { animation: pageIn .45s cubic-bezier(.2,.8,.2,1) both; }
+.stagger > * { animation: cardIn .55s cubic-bezier(.2,.8,.2,1) both; }
+.stagger > *:nth-child(1) { animation-delay: .00s; } .stagger > *:nth-child(2) { animation-delay: .06s; }
+.stagger > *:nth-child(3) { animation-delay: .12s; } .stagger > *:nth-child(4) { animation-delay: .18s; }
+.stagger > *:nth-child(5) { animation-delay: .24s; } .stagger > *:nth-child(6) { animation-delay: .30s; }
+.stagger > *:nth-child(7) { animation-delay: .36s; } .stagger > *:nth-child(8) { animation-delay: .42s; }
+.stagger > *:nth-child(n+9) { animation-delay: .48s; }
+
+/* ── Sidebar ─────────────────────────────────────────── */
+.nav-item {
+  position: relative; width: 100%; text-align: left; white-space: nowrap;
+  padding: 10px 14px; border-radius: 12px; font-size: .875rem; font-weight: 500;
+  display: flex; align-items: center; gap: 10px;
+  color: var(--text-secondary);
+  transition: color .2s, background .25s, transform .2s;
+}
+.nav-item:hover { color: var(--text); background: rgba(148,163,184,.08); transform: translateX(3px); }
+.nav-item.active {
+  color: var(--accent);
+  background: linear-gradient(90deg, rgba(var(--accent-rgb), .18), rgba(var(--accent-rgb), .04));
+}
+.nav-item::before {
+  content: ''; position: absolute; left: 0; top: 22%; bottom: 22%; width: 3px; border-radius: 3px;
+  background: var(--accent); box-shadow: 0 0 12px var(--accent);
+  transform: scaleY(0); transition: transform .3s cubic-bezier(.2,.8,.2,1);
+}
+.nav-item.active::before { transform: scaleY(1); }
+.nav-icon { display: inline-block; transition: transform .3s cubic-bezier(.3,1.6,.5,1); }
+.nav-item:hover .nav-icon, .nav-item.active .nav-icon { transform: scale(1.25) rotate(-6deg); }
+@media (max-width: 767px) {
+  .nav-item::before { top: auto; bottom: 0; left: 20%; right: 20%; width: auto; height: 3px; transform: scaleX(0); }
+  .nav-item.active::before { transform: scaleX(1); }
+  .nav-item:hover { transform: none; }
+}
+
+/* ── Status dot / pulse ──────────────────────────────── */
+.pulse-dot { position: relative; width: 10px; height: 10px; border-radius: 50%; }
+.pulse-dot.on { background: #22c55e; }
+.pulse-dot.on::after {
+  content: ''; position: absolute; inset: 0; border-radius: 50%; background: #22c55e;
+  animation: ping 1.8s cubic-bezier(0,0,.2,1) infinite;
+}
+.pulse-dot.off { background: #ef4444; }
+@keyframes ping { 75%, 100% { transform: scale(2.8); opacity: 0; } }
+
+/* ── Music ───────────────────────────────────────────── */
+.vinyl { animation: spin 10s linear infinite; }
+.vinyl.paused { animation-play-state: paused; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.eq { display: inline-flex; align-items: flex-end; gap: 3px; height: 16px; }
+.eq span { width: 3px; height: 100%; background: var(--accent); border-radius: 2px; transform-origin: bottom; animation: eq 1s ease-in-out infinite; }
+.eq span:nth-child(2) { animation-delay: .2s; } .eq span:nth-child(3) { animation-delay: .45s; } .eq span:nth-child(4) { animation-delay: .1s; }
+.eq.paused span { animation-play-state: paused; transform: scaleY(.25); }
+@keyframes eq { 0%,100% { transform: scaleY(.25); } 50% { transform: scaleY(1); } }
+@keyframes lyricIn { from { opacity: 0; transform: translateY(10px) scale(.96); filter: blur(4px); } to { opacity: 1; transform: none; filter: none; } }
+.lyric-in { animation: lyricIn .45s cubic-bezier(.2,.8,.2,1) both; }
+
+/* ── Toasts ──────────────────────────────────────────── */
+@keyframes toastIn { from { opacity: 0; transform: translateX(40px) scale(.95); } to { opacity: 1; transform: none; } }
+@keyframes toastOut { to { opacity: 0; transform: translateX(40px); } }
+.toast {
+  animation: toastIn .4s cubic-bezier(.2,.8,.2,1) both;
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 14px 40px -10px rgba(0,0,0,.6);
+}
+.toast.leaving { animation: toastOut .3s ease-in both; }
+@keyframes bar { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+
+/* ── Misc ────────────────────────────────────────────── */
+.chip { transition: transform .2s, background .2s; }
+.chip:hover { transform: translateY(-2px); background: rgba(var(--accent-rgb), .15); }
+.pop { animation: pop .35s cubic-bezier(.3,1.6,.5,1) both; }
+@keyframes pop { from { transform: scale(.6); opacity: 0; } to { transform: none; opacity: 1; } }
+.float { animation: floaty 4s ease-in-out infinite; }
+@keyframes floaty { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+.wiggle:hover { animation: wiggle .5s; }
+@keyframes wiggle { 25% { transform: rotate(-12deg); } 75% { transform: rotate(12deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
 </style>
 </head>
 <body>
+<div class="bg-layer"><div class="bg-grid"></div><div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div></div>
 <div id="root"></div>
 <script type="text/babel">
 const { useState, useEffect, useRef, useCallback } = React;
@@ -43,6 +239,12 @@ async function api(path, opts = {}) {
   const res = await fetch(API + path, { headers: { "Content-Type": "application/json" }, ...opts });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
+}
+
+// Toast helper (replaces alert())
+function notify(msg, type) {
+  const t = type || (/^(error|.*failed)/i.test(msg) ? 'error' : 'success');
+  window.dispatchEvent(new CustomEvent('db-toast', { detail: { msg: String(msg), type: t } }));
 }
 
 // ─── WebSocket hook ────────────────────────────────────────
@@ -61,19 +263,69 @@ function useWebSocket(onMessage) {
   }, []);
 }
 
+// ─── Animated number hook ──────────────────────────────────
+function useCountUp(target, duration = 700) {
+  const [val, setVal] = useState(typeof target === 'number' && !isNaN(target) ? target : 0);
+  const prev = useRef(val);
+  useEffect(() => {
+    if (typeof target !== 'number' || isNaN(target)) return;
+    const from = prev.current, to = target, t0 = performance.now();
+    let raf;
+    const tick = (t) => {
+      const p = Math.min(1, (t - t0) / duration);
+      const e = 1 - Math.pow(1 - p, 3);
+      const v = from + (to - from) * e;
+      prev.current = v; setVal(v);
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target]);
+  return val;
+}
+
+// ─── Ring Gauge ────────────────────────────────────────────
+function Gauge({ label, value, color }) {
+  const has = typeof value === 'number' && !isNaN(value);
+  const v = useCountUp(has ? value : 0);
+  const R = 34, C = 2 * Math.PI * R;
+  const pct = Math.max(0, Math.min(100, v));
+  return (
+    <div className="card metric flex items-center gap-4">
+      <div className="relative w-20 h-20 shrink-0">
+        <svg viewBox="0 0 80 80" className="w-full h-full -rotate-90">
+          <circle cx="40" cy="40" r={R} stroke="rgba(148,163,184,.15)" strokeWidth="7" fill="none" />
+          <circle cx="40" cy="40" r={R} stroke={color} strokeWidth="7" fill="none" strokeLinecap="round"
+            strokeDasharray={C} strokeDashoffset={C * (1 - pct / 100)}
+            style={{ filter: `drop-shadow(0 0 6px ${color})`, transition: 'stroke .4s' }} />
+        </svg>
+        <div className="absolute inset-0 flex items-center justify-center text-sm font-bold">
+          {has ? Math.round(v) + '%' : '--'}
+        </div>
+      </div>
+      <div>
+        <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold">{label}</div>
+        <div className="text-xs mt-1" style={{ color }}>{!has ? 'no data' : pct > 80 ? 'High load' : pct > 55 ? 'Moderate' : 'Healthy'}</div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Metric Card ───────────────────────────────────────────
 function MetricCard({ label, value, unit, color, max }) {
-  const pct = max ? Math.min(100, (value / max) * 100) : null;
+  const has = typeof value === 'number' && !isNaN(value);
+  const v = useCountUp(has ? value : 0);
+  const pct = max && has ? Math.min(100, (v / max) * 100) : null;
   return (
-    <div className="card">
-      <div className="text-xs text-slate-400 mb-1">{label}</div>
-      <div className="text-2xl font-bold" style={{ color: color || '#e2e8f0' }}>
-        {value !== null && value !== undefined ? (typeof value === 'number' ? value.toFixed(1) : value) : '--'}
-        <span className="text-sm text-slate-500 ml-1">{unit}</span>
+    <div className="card metric">
+      <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1">{label}</div>
+      <div className="text-2xl font-bold tabular-nums" style={{ color: color || '#e2e8f0' }}>
+        {has ? v.toFixed(1) : (value !== null && value !== undefined ? value : '--')}
+        <span className="text-sm text-slate-500 ml-1 font-medium">{unit}</span>
       </div>
       {pct !== null && (
-        <div className="mt-2 h-2 bg-slate-700 rounded-full overflow-hidden">
-          <div className="h-full rounded-full transition-all duration-500" style={{ width: pct + '%', background: color || '#06b6d4' }}></div>
+        <div className="mt-2 h-1.5 bg-slate-700/60 rounded-full overflow-hidden">
+          <div className="h-full rounded-full" style={{ width: pct + '%', background: `linear-gradient(90deg, ${color || '#06b6d4'}, ${color || '#06b6d4'}aa)`, boxShadow: `0 0 10px ${color || '#06b6d4'}`, transition: 'width .6s cubic-bezier(.2,.8,.2,1)' }}></div>
         </div>
       )}
     </div>
@@ -81,81 +333,96 @@ function MetricCard({ label, value, unit, color, max }) {
 }
 
 // ─── Dashboard ─────────────────────────────────────────────
-function Dashboard({ state, metrics }) {
+const loadColor = (v, hi = 80, mid = 55) => v > hi ? '#ef4444' : v > mid ? '#f59e0b' : '#22c55e';
+
+function Dashboard({ state, metrics, setState, refreshState }) {
   const m = metrics || {};
   const s = state || {};
+  const fmt = (n) => Math.floor(n / 60) + ':' + ('0' + (n % 60)).slice(-2);
+  const pct = s.m_dur > 0 ? Math.min(100, (s.m_prog / s.m_dur) * 100) : 0;
+  const musicCall = async (path) => { try { await api(path, { method: 'POST' }); setTimeout(refreshState, 500); } catch (e) { notify('Error: ' + e.message, 'error'); } };
+  const togglePlay = async () => {
+    try {
+      if (s.m_play) { await api('/desktop/music/pause', { method: 'POST' }); setState(prev => ({ ...prev, m_play: 0 })); }
+      else { await api('/desktop/music/play', { method: 'POST' }); setState(prev => ({ ...prev, m_play: 1 })); }
+      setTimeout(refreshState, 500);
+    } catch (e) { notify('Error: ' + e.message, 'error'); }
+  };
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <MetricCard label="CPU" value={m.cpu_percent} unit="%" color={m.cpu_percent > 80 ? '#ef4444' : m.cpu_percent > 55 ? '#f59e0b' : '#22c55e'} max={100} />
-        <MetricCard label="RAM" value={m.memory_percent} unit="%" color={m.memory_percent > 85 ? '#ef4444' : m.memory_percent > 65 ? '#f59e0b' : '#22c55e'} max={100} />
-        <MetricCard label="GPU" value={m.gpu_percent} unit="%" color={m.gpu_percent > 80 ? '#ef4444' : m.gpu_percent > 55 ? '#f59e0b' : '#22c55e'} max={100} />
-        <MetricCard label="VRAM" value={m.gpu_memory_percent} unit="%" color={m.gpu_memory_percent > 90 ? '#ef4444' : '#06b6d4'} max={100} />
+    <div className="space-y-4 stagger">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+        <Gauge label="CPU" value={m.cpu_percent} color={loadColor(m.cpu_percent)} />
+        <Gauge label="RAM" value={m.memory_percent} color={loadColor(m.memory_percent, 85, 65)} />
+        <Gauge label="GPU" value={m.gpu_percent} color={loadColor(m.gpu_percent)} />
+        <Gauge label="VRAM" value={m.gpu_memory_percent} color={m.gpu_memory_percent > 90 ? '#ef4444' : '#06b6d4'} />
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <MetricCard label="CPU Temp" value={m.cpu_temp_c} unit="°C" color="#f97316" />
-        <MetricCard label="GPU Temp" value={m.gpu_temp_c} unit="°C" color="#f97316" />
+        <MetricCard label="GPU Temp" value={m.gpu_temp_c} unit="°C" color="#fb7185" />
         <MetricCard label="Thermal Zone" value={m.thermal_zone_c} unit="°C" color="#a78bfa" />
         <MetricCard label="GPU Fan" value={m.gpu_fan_percent} unit="%" color="#06b6d4" max={100} />
       </div>
       <div className="card">
-        <div className="text-sm font-semibold mb-2">Device Status</div>
+        <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-3">Device Status</div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
-          <div>Online: <span className={s.dev_online ? 'text-green-400' : 'text-red-400'}>{s.dev_online ? 'Yes' : 'No'}</span></div>
-          <div>Battery: {s.batt_v ? s.batt_v.toFixed(2) + 'V' : '--'} ({s.batt >= 0 ? s.batt + '%' : 'N/A'})</div>
-          <div>Mic: {s.mic >= 0 ? s.mic + '/100' : 'offline'}</div>
-          <div>Env: {s.env_t > -900 ? s.env_t.toFixed(1) + '°C' : '--'}</div>
+          <div className="chip rounded-xl bg-slate-700/30 px-3 py-2"><div className="text-xs text-slate-400">Online</div><div className={'font-semibold ' + (s.dev_online ? 'text-green-400' : 'text-red-400')}>{s.dev_online ? 'Yes' : 'No'}</div></div>
+          <div className="chip rounded-xl bg-slate-700/30 px-3 py-2"><div className="text-xs text-slate-400">Battery</div><div className="font-semibold">{s.batt_v ? s.batt_v.toFixed(2) + 'V' : '--'} <span className="text-slate-400 font-normal">({s.batt >= 0 ? s.batt + '%' : 'N/A'})</span></div></div>
+          <div className="chip rounded-xl bg-slate-700/30 px-3 py-2"><div className="text-xs text-slate-400">Mic</div><div className="font-semibold">{s.mic >= 0 ? s.mic + '/100' : 'offline'}</div></div>
+          <div className="chip rounded-xl bg-slate-700/30 px-3 py-2"><div className="text-xs text-slate-400">Env</div><div className="font-semibold">{s.env_t > -900 ? s.env_t.toFixed(1) + '°C' : '--'}</div></div>
         </div>
       </div>
       <div className="card relative overflow-hidden">
         {s.m_art && (
           <div
-            className="absolute inset-0 bg-cover bg-center opacity-25 pointer-events-none transition-all duration-700"
-            style={{
-              backgroundImage: `url(${s.m_art})`,
-              filter: 'blur(30px) brightness(0.7)',
-              transform: 'scale(1.2)',
-            }}
+            className="absolute inset-0 bg-cover bg-center opacity-30 pointer-events-none transition-all duration-1000"
+            style={{ backgroundImage: `url(${s.m_art})`, filter: 'blur(40px) brightness(0.7) saturate(1.4)', transform: 'scale(1.3)' }}
           />
         )}
         <div className="relative z-10 flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
           <div className="flex items-center gap-4">
-            {s.m_art ? (
-              <img src={s.m_art} alt="Cover" className="w-16 h-16 rounded-lg object-cover shadow-lg border border-slate-700/60" />
-            ) : (
-              <div className="w-16 h-16 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-2xl text-cyan-400 shadow">
-                ♪
-              </div>
-            )}
+            <div className="relative shrink-0">
+              {s.m_art ? (
+                <img src={s.m_art} alt="Cover" className={'w-20 h-20 rounded-full object-cover shadow-2xl border-2 border-slate-600/60 vinyl ' + (s.m_play ? '' : 'paused')} />
+              ) : (
+                <div className="w-20 h-20 rounded-full bg-slate-800/80 border border-slate-700 flex items-center justify-center text-3xl text-cyan-400 shadow float">♪</div>
+              )}
+              <div className="absolute inset-0 m-auto w-4 h-4 rounded-full" style={{ background: 'var(--bg)', boxShadow: '0 0 0 2px rgba(255,255,255,.15)' }}></div>
+            </div>
             <div>
-              <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-0.5">Now Playing</div>
-              <div className="text-lg font-bold text-cyan-400 leading-tight">{s.m_title || 'Nothing playing'}</div>
+              <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-slate-400 font-semibold mb-0.5">
+                Now Playing
+                <span className={'eq ' + (s.m_play ? '' : 'paused')}><span></span><span></span><span></span><span></span></span>
+              </div>
+              <div key={s.m_title} className="text-lg font-bold text-cyan-400 leading-tight lyric-in">{s.m_title || 'Nothing playing'}</div>
               <div className="text-slate-300 text-sm">{s.m_artist || 'Start music on PC or YouTube Music'}</div>
               {s.m_dur > 0 && (
-                <div className="text-xs text-slate-400 mt-1">
-                  {Math.floor(s.m_prog / 60)}:{('0' + (s.m_prog % 60)).slice(-2)} / {Math.floor(s.m_dur / 60)}:{('0' + (s.m_dur % 60)).slice(-2)}
+                <div className="mt-2 w-56 max-w-full">
+                  <div className="h-1.5 bg-slate-700/60 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full" style={{ width: pct + '%', background: 'linear-gradient(90deg, var(--accent), #a78bfa)', transition: 'width 1s linear', boxShadow: '0 0 10px var(--accent)' }}></div>
+                  </div>
+                  <div className="flex justify-between text-[11px] text-slate-400 mt-1 tabular-nums"><span>{fmt(s.m_prog)}</span><span>{fmt(s.m_dur)}</span></div>
                 </div>
               )}
             </div>
           </div>
-          <div className="flex gap-2">
-            <button className="btn btn-secondary text-xs" onClick={async () => { try { await api('/desktop/music/previous', {method:'POST'}); setTimeout(refreshState, 500); } catch(e) { alert('Error: ' + e.message); } }}>Prev</button>
-            <button className="btn btn-primary text-xs" onClick={async () => { try { if (s.m_play) { await api('/desktop/music/pause', {method:'POST'}); setState(prev => ({...prev, m_play: 0})); } else { await api('/desktop/music/play', {method:'POST'}); setState(prev => ({...prev, m_play: 1})); } setTimeout(refreshState, 500); } catch(e) { alert('Error: ' + e.message); } }}>{s.m_play ? 'Pause' : 'Play'}</button>
-            <button className="btn btn-secondary text-xs" onClick={async () => { try { await api('/desktop/music/next', {method:'POST'}); setTimeout(refreshState, 500); } catch(e) { alert('Error: ' + e.message); } }}>Next</button>
+          <div className="flex gap-2 items-center">
+            <button className="btn btn-secondary text-xs" onClick={() => musicCall('/desktop/music/previous')}>⏮ Prev</button>
+            <button className="btn btn-primary text-xs" onClick={togglePlay}>{s.m_play ? '⏸ Pause' : '▶ Play'}</button>
+            <button className="btn btn-secondary text-xs" onClick={() => musicCall('/desktop/music/next')}>Next ⏭</button>
           </div>
         </div>
         {s.lyr_ok && (
           <div className="relative z-10 mt-4 pt-3 border-t border-slate-700/50">
             <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
-              <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${s.lyr_sync ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${s.lyr_sync ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
                 {s.lyr_sync ? 'SYNCED' : 'UNSYNCED'}
               </span>
-              {s.lyr_tot > 0 && <span>{s.lyr_idx + 1} / {s.lyr_tot}</span>}
+              {s.lyr_tot > 0 && <span className="tabular-nums">{s.lyr_idx + 1} / {s.lyr_tot}</span>}
             </div>
             <div className="text-center space-y-1.5 py-1">
-              {s.lyr_prev && <div className="text-xs text-slate-400 opacity-60 transition-all">{s.lyr_prev}</div>}
-              <div className="text-base font-bold text-cyan-300 drop-shadow-md py-1 transition-all scale-105">{s.lyr_cur || '...'}</div>
-              {s.lyr_next && <div className="text-xs text-slate-400 opacity-60 transition-all">{s.lyr_next}</div>}
+              {s.lyr_prev && <div className="text-xs text-slate-400 opacity-50">{s.lyr_prev}</div>}
+              <div key={s.lyr_cur} className="text-lg font-bold text-cyan-300 py-1 lyric-in" style={{ textShadow: '0 0 24px rgba(var(--accent-rgb), .6)' }}>{s.lyr_cur || '...'}</div>
+              {s.lyr_next && <div className="text-xs text-slate-400 opacity-50">{s.lyr_next}</div>}
             </div>
           </div>
         )}
@@ -167,6 +434,15 @@ function Dashboard({ state, metrics }) {
 // ─── Expressions ───────────────────────────────────────────
 const EXPRESSIONS = ["relaxed","happy","sad","angry","sleepy","thinking","curious","excited","surprised","confused","laughing","music","typing","coding","browsing","gaming","watching","sleeping","deep_sleep","autonomous"];
 const ACTIVITIES = ["idle","coding","browsing","music","gaming","watching","typing","thinking","gaming"];
+
+function SectionHeader({ title, sub }) {
+  return (
+    <div>
+      <h2 className="text-2xl font-extrabold tracking-tight gradient-text inline-block">{title}</h2>
+      {sub && <p className="text-slate-400 text-sm mt-1">{sub}</p>}
+    </div>
+  );
+}
 
 function Expressions() {
   const [mappings, setMappings] = useState([]);
@@ -184,22 +460,21 @@ function Expressions() {
         if (act && sel) mappings.push({activity: act, expression: sel.value});
       });
       await api('/config/expressions', {method:'PUT', body: JSON.stringify(mappings)});
-      alert('Expression mappings saved!');
-    } catch(e) { alert('Error: ' + e.message); }
+      notify('Expression mappings saved!');
+    } catch(e) { notify('Error: ' + e.message, 'error'); }
   };
   return (
-    <div className="space-y-4">
-      <h2 className="text-xl font-bold">Expression Mappings</h2>
-      <p className="text-slate-400 text-sm">Map PC activities to OLED face expressions.</p>
+    <div className="space-y-4 stagger">
+      <SectionHeader title="Expression Mappings" sub="Map PC activities to OLED face expressions." />
       <div className="card">
         <table className="w-full text-sm">
           <thead><tr className="text-slate-400"><th className="text-left py-2">Activity</th><th className="text-left py-2">Expression</th><th className="text-left py-2">Actions</th></tr></thead>
           <tbody>
-            {ACTIVITIES.map(act => (
-              <tr key={act} className="border-t border-slate-700">
+            {ACTIVITIES.map((act, idx) => (
+              <tr key={act + idx} className="border-t border-slate-700/60">
                 <td className="py-2 font-mono">{act}</td>
                 <td className="py-2">
-                  <select className="bg-slate-700 rounded px-2 py-1" defaultValue="relaxed">
+                  <select className="px-2 py-1" defaultValue="relaxed">
                     {EXPRESSIONS.map(e => <option key={e} value={e}>{e}</option>)}
                   </select>
                 </td>
@@ -208,7 +483,7 @@ function Expressions() {
                     const row = e.target.closest('tr');
                     const sel = row.querySelector('select');
                     const expr = sel ? sel.value : 'happy';
-                    api('/companion/emotion', {method:'POST', body: JSON.stringify({expression: expr, duration_seconds: 5})}).then(() => alert('Expression "' + expr + '" sent for 5s')).catch(err => alert('Error: ' + err.message));
+                    api('/companion/emotion', {method:'POST', body: JSON.stringify({expression: expr, duration_seconds: 5})}).then(() => notify('Expression "' + expr + '" sent for 5s')).catch(err => notify('Error: ' + err.message, 'error'));
                   }}>Test</button>
                 </td>
               </tr>
@@ -218,11 +493,11 @@ function Expressions() {
       </div>
       <button className="btn btn-primary" onClick={saveMappings}>Save Mappings</button>
       <div className="card">
-        <h3 className="font-semibold mb-2">Sleep Thresholds (seconds)</h3>
+        <h3 className="font-semibold mb-3">Sleep Thresholds (seconds)</h3>
         <div className="grid grid-cols-3 gap-3 text-sm">
-          <div><label className="text-slate-400">Sleepy</label><input type="number" className="bg-slate-700 rounded px-2 py-1 w-full" defaultValue={30} /></div>
-          <div><label className="text-slate-400">Sleeping</label><input type="number" className="bg-slate-700 rounded px-2 py-1 w-full" defaultValue={120} /></div>
-          <div><label className="text-slate-400">Deep Sleep</label><input type="number" className="bg-slate-700 rounded px-2 py-1 w-full" defaultValue={300} /></div>
+          <div><label className="text-slate-400">Sleepy</label><input type="number" className="px-2 py-1 w-full" defaultValue={30} /></div>
+          <div><label className="text-slate-400">Sleeping</label><input type="number" className="px-2 py-1 w-full" defaultValue={120} /></div>
+          <div><label className="text-slate-400">Deep Sleep</label><input type="number" className="px-2 py-1 w-full" defaultValue={300} /></div>
         </div>
       </div>
     </div>
@@ -235,10 +510,11 @@ const PAGES = ["home", "music", "lyrics", "pc", "env", "notifications", "pomodor
 const ACTIONS = ["next_page", "prev_page", "play_pause", "volume_up", "volume_down", "toggle_mode", "voice_request", "none"];
 
 function ButtonMappings() {
+  // NOTE: no backend endpoint for button mappings exists in this file yet.
+  const saveMappings = () => notify('Button mapping save is not wired to a backend endpoint yet', 'error');
   return (
-    <div className="space-y-4">
-      <h2 className="text-xl font-bold">Button Mappings</h2>
-      <p className="text-slate-400 text-sm">Configure what each button does on each page.</p>
+    <div className="space-y-4 stagger">
+      <SectionHeader title="Button Mappings" sub="Configure what each button does on each page." />
       <div className="card overflow-x-auto">
         <table className="w-full text-sm">
           <thead><tr className="text-slate-400">
@@ -247,11 +523,11 @@ function ButtonMappings() {
           </tr></thead>
           <tbody>
             {BUTTONS.map(btn => (
-              <tr key={btn} className="border-t border-slate-700">
+              <tr key={btn} className="border-t border-slate-700/60">
                 <td className="py-2 font-mono font-bold">{btn}</td>
                 {PAGES.map(p => (
                   <td key={p} className="py-2 px-2">
-                    <select className="bg-slate-700 rounded px-1 py-1 text-xs">
+                    <select className="px-1 py-1 text-xs">
                       {ACTIONS.map(a => <option key={a} value={a}>{a}</option>)}
                     </select>
                   </td>
@@ -263,8 +539,8 @@ function ButtonMappings() {
       </div>
       <button className="btn btn-primary" onClick={saveMappings}>Save Mappings</button>
       <div className="card">
-        <h3 className="font-semibold mb-2">Gesture Config</h3>
-        <div className="grid grid-cols-2 gap-3 text-sm">
+        <h3 className="font-semibold mb-3">Gesture Config</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
           <label className="flex items-center gap-2"><input type="checkbox" defaultChecked /> Single tap → Wake</label>
           <label className="flex items-center gap-2"><input type="checkbox" defaultChecked /> Double tap → Music</label>
           <label className="flex items-center gap-2"><input type="checkbox" defaultChecked /> Triple tap → Voice</label>
@@ -281,38 +557,39 @@ function Notifications() {
   useEffect(() => {
     api('/desktop/notifications?limit=50').then(d => setNotifs(d.notifications || [])).catch(() => {});
   }, []);
+  const addRule = () => notify('Rule added (placeholder - backend endpoint coming soon)');
   return (
-    <div className="space-y-4">
-      <h2 className="text-xl font-bold">Notifications</h2>
+    <div className="space-y-4 stagger">
+      <SectionHeader title="Notifications" />
       <div className="card">
-        <h3 className="font-semibold mb-2">Notification Rules</h3>
+        <h3 className="font-semibold mb-1">Notification Rules</h3>
         <p className="text-slate-400 text-sm mb-3">IF condition THEN send notification</p>
-        <div className="space-y-2">
-          <div className="flex gap-2 items-center text-sm">
-            <span className="text-cyan-400">IF</span> CPU &gt; <input className="bg-slate-700 rounded px-2 py-1 w-16" defaultValue={80} />%
-            <span className="text-cyan-400">THEN</span> notify "High CPU" priority
-            <select className="bg-slate-700 rounded px-2 py-1"><option>high</option><option>normal</option><option>urgent</option></select>
-            <button className="btn btn-secondary text-xs" onClick={() => alert('Rule added (placeholder - backend endpoint coming soon)')}>Add Rule</button>
+        <div className="space-y-3">
+          <div className="flex flex-wrap gap-2 items-center text-sm">
+            <span className="text-cyan-400 font-bold">IF</span> CPU &gt; <input className="px-2 py-1 w-16" defaultValue={80} />%
+            <span className="text-cyan-400 font-bold">THEN</span> notify "High CPU" priority
+            <select className="px-2 py-1"><option>high</option><option>normal</option><option>urgent</option></select>
+            <button className="btn btn-secondary text-xs" onClick={addRule}>Add Rule</button>
           </div>
-          <div className="flex gap-2 items-center text-sm">
-            <span className="text-cyan-400">IF</span> GPU temp &gt; <input className="bg-slate-700 rounded px-2 py-1 w-16" defaultValue={80} />°C
-            <span className="text-cyan-400">THEN</span> notify "GPU Hot" priority
-            <select className="bg-slate-700 rounded px-2 py-1"><option>high</option><option>normal</option><option>urgent</option></select>
-            <button className="btn btn-secondary text-xs" onClick={() => alert('Rule added (placeholder - backend endpoint coming soon)')}>Add Rule</button>
+          <div className="flex flex-wrap gap-2 items-center text-sm">
+            <span className="text-cyan-400 font-bold">IF</span> GPU temp &gt; <input className="px-2 py-1 w-16" defaultValue={80} />°C
+            <span className="text-cyan-400 font-bold">THEN</span> notify "GPU Hot" priority
+            <select className="px-2 py-1"><option>high</option><option>normal</option><option>urgent</option></select>
+            <button className="btn btn-secondary text-xs" onClick={addRule}>Add Rule</button>
           </div>
         </div>
       </div>
       <div className="card">
         <h3 className="font-semibold mb-2">History</h3>
-        <div className="space-y-2 max-h-64 overflow-y-auto">
+        <div className="space-y-1 max-h-72 overflow-y-auto pr-1">
           {notifs.length === 0 && <p className="text-slate-500 text-sm">No notifications yet.</p>}
           {notifs.map((n, i) => (
-            <div key={i} className="flex justify-between items-center text-sm border-b border-slate-700 py-2">
+            <div key={i} className="flex justify-between items-center text-sm border-b border-slate-700/50 py-2 lyric-in" style={{ animationDelay: Math.min(i, 12) * 30 + 'ms' }}>
               <div>
                 <div className="font-semibold">{n.title || 'Notification'}</div>
                 <div className="text-slate-400 text-xs">{n.message}</div>
               </div>
-              <span className={`text-xs px-2 py-1 rounded ${n.priority === 'urgent' ? 'bg-red-500/20 text-red-400' : n.priority === 'high' ? 'bg-amber-500/20 text-amber-400' : 'bg-slate-500/20 text-slate-400'}`}>{n.priority || 'normal'}</span>
+              <span className={`text-xs px-2 py-1 rounded-full ${n.priority === 'urgent' ? 'bg-red-500/20 text-red-400' : n.priority === 'high' ? 'bg-amber-500/20 text-amber-400' : 'bg-slate-500/20 text-slate-400'}`}>{n.priority || 'normal'}</span>
             </div>
           ))}
         </div>
@@ -336,26 +613,28 @@ function SensorGraphs() {
     if (!chartRef.current) return;
     if (chartInstance.current) chartInstance.current.destroy();
     const ctx = chartRef.current.getContext('2d');
-    const labels = metrics.map((_, i) => i);
+    const grad = (c) => { const g = ctx.createLinearGradient(0, 0, 0, 260); g.addColorStop(0, c + '55'); g.addColorStop(1, c + '00'); return g; };
+    const labels = (Array.isArray(metrics) ? metrics : []).map((_, i) => i);
+    const list = Array.isArray(metrics) ? metrics : [];
+    const ds = (label, key, c) => ({ label, data: list.map(m => m[key]), borderColor: c, backgroundColor: grad(c), fill: true, borderWidth: 2, tension: 0.4, pointRadius: 0, pointHoverRadius: 5 });
     chartInstance.current = new Chart(ctx, {
       type: 'line',
-      data: {
-        labels,
-        datasets: [
-          { label: 'CPU %', data: metrics.map(m => m.cpu_percent), borderColor: '#22c55e', tension: 0.3, pointRadius: 0 },
-          { label: 'RAM %', data: metrics.map(m => m.memory_percent), borderColor: '#06b6d4', tension: 0.3, pointRadius: 0 },
-          { label: 'GPU %', data: metrics.map(m => m.gpu_percent), borderColor: '#a78bfa', tension: 0.3, pointRadius: 0 },
-        ]
-      },
-      options: { responsive: true, plugins: { legend: { labels: { color: '#94a3b8' } } }, scales: { x: { display: false }, y: { min: 0, max: 100, ticks: { color: '#94a3b8' }, grid: { color: '#1e293b' } } } }
+      data: { labels, datasets: [ds('CPU %', 'cpu_percent', '#22c55e'), ds('RAM %', 'memory_percent', '#06b6d4'), ds('GPU %', 'gpu_percent', '#a78bfa')] },
+      options: {
+        responsive: true,
+        interaction: { mode: 'index', intersect: false },
+        animation: { duration: 900, easing: 'easeOutQuart' },
+        plugins: { legend: { labels: { color: '#94a3b8', usePointStyle: true, boxWidth: 8 } }, tooltip: { backgroundColor: 'rgba(15,23,42,.95)', borderColor: 'rgba(148,163,184,.25)', borderWidth: 1, padding: 10 } },
+        scales: { x: { display: false }, y: { min: 0, max: 100, ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,.08)' } } }
+      }
     });
     return () => { if (chartInstance.current) chartInstance.current.destroy(); };
   }, [metrics]);
 
   return (
-    <div className="space-y-4">
-      <h2 className="text-xl font-bold">Sensor Graphs & Historical Metrics</h2>
-      <div className="flex gap-2 mb-2">
+    <div className="space-y-4 stagger">
+      <SectionHeader title="Sensor Graphs & Historical Metrics" />
+      <div className="flex gap-2">
         {['1h','6h','24h','7d'].map(r => <button key={r} className={`btn text-xs ${range===r?'btn-primary':'btn-secondary'}`} onClick={() => setRange(r)}>{r}</button>)}
       </div>
       <div className="card"><canvas ref={chartRef} height="200"></canvas></div>
@@ -376,12 +655,15 @@ function InspectionModels() {
     api(`/inspect/prognostics/${selectedMotor}`).then(d => setProg(d)).catch(() => {});
   }, [selectedMotor]);
 
+  const health = prog?.prognostics?.health_index_pct;
+  const hv = useCountUp(typeof health === 'number' ? health : 0);
+
   return (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <h2 className="text-xl font-bold">Industrial Inspection & Predictive Prognostics</h2>
+    <div className="space-y-4 stagger">
+      <div className="flex flex-wrap gap-3 justify-between items-center">
+        <SectionHeader title="Industrial Inspection & Predictive Prognostics" />
         <select
-          className="bg-slate-700 text-xs rounded px-3 py-1.5 border border-slate-600 text-cyan-300 font-semibold"
+          className="text-xs px-3 py-1.5 text-cyan-300 font-semibold"
           value={selectedMotor}
           onChange={e => setSelectedMotor(e.target.value)}
         >
@@ -391,7 +673,7 @@ function InspectionModels() {
       </div>
 
       {prog && (
-        <div className="card border border-cyan-500/30 bg-slate-800/90 shadow-xl space-y-4">
+        <div key={selectedMotor} className="card space-y-4 pop" style={{ borderColor: 'rgba(var(--accent-rgb), .3)' }}>
           <div className="flex justify-between items-start">
             <div>
               <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold">Equipment Health & Timeline</div>
@@ -402,41 +684,41 @@ function InspectionModels() {
             </div>
             <div className="text-right">
               <div className="text-xs text-slate-400">Health Index</div>
-              <div className="text-2xl font-bold" style={{ color: prog.prognostics?.health_index_pct > 75 ? '#22c55e' : prog.prognostics?.health_index_pct > 40 ? '#f59e0b' : '#ef4444' }}>
-                {prog.prognostics?.health_index_pct}%
+              <div className="text-3xl font-extrabold tabular-nums" style={{ color: health > 75 ? '#22c55e' : health > 40 ? '#f59e0b' : '#ef4444', textShadow: '0 0 18px currentColor' }}>
+                {typeof health === 'number' ? Math.round(hv) : '--'}%
               </div>
               <div className="text-[10px] text-slate-400 uppercase tracking-wider">{prog.vibration_metrics?.wear_stage}</div>
             </div>
           </div>
 
-          <div className="bg-slate-900/80 p-4 rounded-xl border border-slate-700/60">
+          <div className="p-4 rounded-xl border border-slate-700/60" style={{ background: 'rgba(2,6,23,.45)' }}>
             <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1">Predictive Breakdown Forecast</div>
-            <div className="text-2xl font-black text-amber-400 tracking-wide">
+            <div className="text-2xl font-black text-amber-400 tracking-wide" style={{ textShadow: '0 0 20px rgba(245,158,11,.4)' }}>
               {prog.prognostics?.timeline_forecast}
             </div>
             <div className="text-xs text-slate-300 mt-1">
               Estimated Date of Breakdown: <span className="font-semibold text-white">{prog.prognostics?.projected_failure_date}</span> (±{prog.prognostics?.confidence_margin_days} days)
             </div>
-            <div className="text-xs text-cyan-400/90 mt-2 p-2 bg-slate-800 rounded border border-cyan-900/40">
+            <div className="text-xs text-cyan-400/90 mt-3 p-3 rounded-lg border border-cyan-900/40" style={{ background: 'rgba(var(--accent-rgb), .06)' }}>
               <span className="font-bold uppercase text-[10px] text-slate-400 block mb-0.5">Recommended Action</span>
               {prog.prognostics?.action_recommendation}
             </div>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
-            <div className="p-2 bg-slate-700/40 rounded">
+            <div className="chip p-3 bg-slate-700/30 rounded-xl">
               <div className="text-slate-400">Current Vibration</div>
               <div className="font-bold text-sm text-cyan-300">{prog.vibration_metrics?.current_rms_mm_s} mm/s</div>
             </div>
-            <div className="p-2 bg-slate-700/40 rounded">
+            <div className="chip p-3 bg-slate-700/30 rounded-xl">
               <div className="text-slate-400">ISO 10816 Zone</div>
               <div className="font-bold text-sm text-white">{prog.vibration_metrics?.iso_10816_zone}</div>
             </div>
-            <div className="p-2 bg-slate-700/40 rounded">
+            <div className="chip p-3 bg-slate-700/30 rounded-xl">
               <div className="text-slate-400">Diagnosis</div>
               <div className="font-bold text-sm text-green-400">{prog.vibration_metrics?.diagnosis}</div>
             </div>
-            <div className="p-2 bg-slate-700/40 rounded">
+            <div className="chip p-3 bg-slate-700/30 rounded-xl">
               <div className="text-slate-400">Confidence</div>
               <div className="font-bold text-sm text-white">{prog.vibration_metrics?.confidence}%</div>
             </div>
@@ -448,29 +730,41 @@ function InspectionModels() {
         <h3 className="font-semibold mb-2">Active Classification Model</h3>
         <div className="text-sm text-slate-400">1D-CNN trained on CWRU Bearing Dataset — 4 classes: Normal, Inner Race, Ball, Outer Race</div>
         <div className="text-sm text-slate-400">Window: 1200 samples @ 12000 Hz | Test accuracy: 100%</div>
-        <div className="text-sm text-green-400 mt-1">Status: Loaded & active</div>
+        <div className="text-sm text-green-400 mt-2 flex items-center gap-2"><span className="pulse-dot on"></span> Status: Loaded & active</div>
       </div>
       <div className="card">
         <h3 className="font-semibold mb-2">Upload New Model</h3>
         <input type="file" accept=".pth,.pt,.onnx" className="text-sm" id="modelFile" />
-        <button className="btn btn-secondary text-xs mt-2" onClick={async () => {
+        <button className="btn btn-secondary text-xs mt-3" onClick={async () => {
           const file = document.getElementById('modelFile').files[0];
-          if (!file) { alert('Select a file first'); return; }
-          const fd = new FormData(); fd.append('file', file);
-          try { await fetch(API + '/inspect/vibration', {method:'POST', body: JSON.stringify({device_id:'test', x:[1,2,3], y:[1,2,3], z:[1,2,3], sample_rate_hz:1000, method:'traditional', duration_seconds:1}), headers:{'Content-Type':'application/json'}}); alert('Upload not yet implemented - use models/ folder'); } catch(e) { alert('Error: ' + e.message); }
+          if (!file) { notify('Select a file first', 'error'); return; }
+          try { await fetch(API + '/inspect/vibration', {method:'POST', body: JSON.stringify({device_id:'test', x:[1,2,3], y:[1,2,3], z:[1,2,3], sample_rate_hz:1000, method:'traditional', duration_seconds:1}), headers:{'Content-Type':'application/json'}}); notify('Upload not yet implemented - use models/ folder', 'error'); } catch(e) { notify('Error: ' + e.message, 'error'); }
         }}>Upload</button>
       </div>
       <div className="card">
         <h3 className="font-semibold mb-2">Test Analysis</h3>
-        <textarea className="bg-slate-700 rounded p-2 w-full text-xs mono" rows={4} placeholder="Paste vibration data (JSON array)..." />
-        <button className="btn btn-primary text-xs mt-2" onClick={async () => {
+        <textarea className="p-2 w-full text-xs mono" rows={4} placeholder="Paste vibration data (JSON array)..." />
+        <button className="btn btn-primary text-xs mt-3" onClick={async () => {
           try {
-            const r = await api('/inspect/vibration', {method:'POST', body: JSON.stringify({device_id:'test', x:[0.1,0.2,0.15,0.12,0.18]*100, y:[0.05,0.08,0.06,0.07,0.09]*100, z:[9.8,9.81,9.79,9.82,9.78]*100, sample_rate_hz:1000, method:'cnn', duration_seconds:5})});
-            alert('Result: ' + r.predicted_class + ' (confidence: ' + (r.confidence*100).toFixed(1) + '%)');
-          } catch(e) { alert('Error: ' + e.message); }
+            // Build 500-sample test signals (the original `[...]*100` evaluated to NaN)
+            const rep = (arr) => Array.from({ length: 500 }, (_, i) => arr[i % arr.length]);
+            const r = await api('/inspect/vibration', {method:'POST', body: JSON.stringify({device_id:'test', x:rep([0.1,0.2,0.15,0.12,0.18]), y:rep([0.05,0.08,0.06,0.07,0.09]), z:rep([9.8,9.81,9.79,9.82,9.78]), sample_rate_hz:1000, method:'cnn', duration_seconds:5})});
+            notify('Result: ' + r.predicted_class + ' (confidence: ' + (r.confidence*100).toFixed(1) + '%)');
+          } catch(e) { notify('Error: ' + e.message, 'error'); }
         }}>Run Analysis</button>
       </div>
     </div>
+  );
+}
+
+// ─── Toggle switch ────────────────────────────────────────
+function Switch({ on, onClick }) {
+  return (
+    <button onClick={onClick} aria-pressed={on}
+      className="relative w-14 h-8 rounded-full shrink-0"
+      style={{ background: on ? 'linear-gradient(135deg, var(--accent), #8b5cf6)' : 'rgba(148,163,184,.25)', boxShadow: on ? '0 0 18px rgba(var(--accent-rgb), .5)' : 'none', transition: 'all .3s' }}>
+      <span className="absolute top-1 w-6 h-6 rounded-full bg-white shadow" style={{ left: on ? '28px' : '4px', transition: 'left .3s cubic-bezier(.3,1.5,.5,1)' }}></span>
+    </button>
   );
 }
 
@@ -505,24 +799,22 @@ function GamingMode() {
   };
 
   return (
-    <div className="space-y-4">
-      <h2 className="text-xl font-bold">Gaming Mode</h2>
+    <div className="space-y-4 stagger">
+      <SectionHeader title="Gaming Mode" />
       <div className="card flex items-center justify-between">
         <div>
           <div className="font-semibold">Gaming Mode</div>
           <div className="text-sm text-slate-400">Auto-detect games, track sessions, monitor temps</div>
         </div>
-        <button className={`btn ${config.enabled ? 'btn-primary' : 'btn-secondary'}`} onClick={toggleEnabled}>
-          {config.enabled ? 'ON' : 'OFF'}
-        </button>
+        <Switch on={config.enabled} onClick={toggleEnabled} />
       </div>
 
       {status && status.active && status.session && (
-        <div className="card border-green-500/30">
+        <div className="card pop" style={{ borderColor: 'rgba(34,197,94,.4)', boxShadow: '0 0 40px -10px rgba(34,197,94,.35)' }}>
           <div className="flex justify-between items-center">
             <div>
               <div className="text-lg font-bold text-green-400">{status.session.game_name}</div>
-              <div className="text-sm text-slate-400">Session active</div>
+              <div className="text-sm text-slate-400 flex items-center gap-2"><span className="pulse-dot on"></span> Session active</div>
             </div>
             <div className="text-2xl font-bold mono">{status.session.started_at ? new Date(status.session.started_at).toLocaleTimeString() : '--'}</div>
           </div>
@@ -539,28 +831,28 @@ function GamingMode() {
       )}
 
       <div className="card">
-        <h3 className="font-semibold mb-2">Detection Settings</h3>
-        <div className="grid grid-cols-2 gap-3 text-sm">
+        <h3 className="font-semibold mb-3">Detection Settings</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
           <label className="flex items-center gap-2"><input type="checkbox" checked={config.auto_detect} onChange={e => setConfig(c=>({...c, auto_detect: e.target.checked}))} /> Auto-detect games</label>
           <label className="flex items-center gap-2"><input type="checkbox" checked={config.fullscreen_detection} onChange={e => setConfig(c=>({...c, fullscreen_detection: e.target.checked}))} /> Fullscreen detection</label>
-          <div><label className="text-slate-400">GPU threshold %</label><input type="number" className="bg-slate-700 rounded px-2 py-1 w-full" value={config.gpu_threshold} onChange={e => setConfig(c=>({...c, gpu_threshold: +e.target.value}))} /></div>
-          <div><label className="text-slate-400">CPU threshold %</label><input type="number" className="bg-slate-700 rounded px-2 py-1 w-full" value={config.cpu_threshold} onChange={e => setConfig(c=>({...c, cpu_threshold: +e.target.value}))} /></div>
-          <div><label className="text-slate-400">Sustained (seconds)</label><input type="number" className="bg-slate-700 rounded px-2 py-1 w-full" value={config.sustained_seconds} onChange={e => setConfig(c=>({...c, sustained_seconds: +e.target.value}))} /></div>
+          <div><label className="text-slate-400">GPU threshold %</label><input type="number" className="px-2 py-1 w-full" value={config.gpu_threshold} onChange={e => setConfig(c=>({...c, gpu_threshold: +e.target.value}))} /></div>
+          <div><label className="text-slate-400">CPU threshold %</label><input type="number" className="px-2 py-1 w-full" value={config.cpu_threshold} onChange={e => setConfig(c=>({...c, cpu_threshold: +e.target.value}))} /></div>
+          <div><label className="text-slate-400">Sustained (seconds)</label><input type="number" className="px-2 py-1 w-full" value={config.sustained_seconds} onChange={e => setConfig(c=>({...c, sustained_seconds: +e.target.value}))} /></div>
         </div>
-        <button className="btn btn-primary text-xs mt-3" onClick={() => api('/gaming/config', {method:'POST', body: JSON.stringify(config)})}>Save Config</button>
+        <button className="btn btn-primary text-xs mt-3" onClick={() => api('/gaming/config', {method:'POST', body: JSON.stringify(config)}).then(() => notify('Gaming config saved')).catch(e => notify('Error: ' + e.message, 'error'))}>Save Config</button>
       </div>
 
       <div className="card">
         <h3 className="font-semibold mb-2">Game Library (manual)</h3>
         <p className="text-slate-400 text-sm mb-2">Add game .exe names for instant detection (pirated games included).</p>
         <div className="flex gap-2 mb-3">
-          <input className="bg-slate-700 rounded px-2 py-1 flex-1 text-sm" placeholder="e.g. eldenring.exe" value={newGame} onChange={e => setNewGame(e.target.value)} onKeyDown={e => e.key === 'Enter' && addGame()} />
+          <input className="px-3 py-1.5 flex-1 text-sm" placeholder="e.g. eldenring.exe" value={newGame} onChange={e => setNewGame(e.target.value)} onKeyDown={e => e.key === 'Enter' && addGame()} />
           <button className="btn btn-primary text-xs" onClick={addGame}>Add</button>
         </div>
         <div className="flex flex-wrap gap-2">
           {(config.game_library || []).map(g => (
-            <span key={g} className="bg-slate-700 rounded px-2 py-1 text-xs flex items-center gap-1">
-              {g} <button onClick={() => removeGame(g)} className="text-red-400 hover:text-red-300">×</button>
+            <span key={g} className="pop chip rounded-full px-3 py-1 text-xs flex items-center gap-2" style={{ background: 'rgba(var(--accent-rgb), .12)', border: '1px solid rgba(var(--accent-rgb), .25)' }}>
+              {g} <button onClick={() => removeGame(g)} className="text-red-400 hover:text-red-300 font-bold">×</button>
             </span>
           ))}
           {(config.game_library || []).length === 0 && <span className="text-slate-500 text-sm">No games added yet.</span>}
@@ -568,13 +860,13 @@ function GamingMode() {
       </div>
 
       <div className="card">
-        <h3 className="font-semibold mb-2">Alert Thresholds</h3>
-        <div className="grid grid-cols-2 gap-3 text-sm">
-          <div><label className="text-slate-400">GPU Temp (°C)</label><input type="number" className="bg-slate-700 rounded px-2 py-1 w-full" value={config.gpu_temp_threshold} onChange={e => setConfig(c=>({...c, gpu_temp_threshold: +e.target.value}))} /></div>
-          <div><label className="text-slate-400">CPU Temp (°C)</label><input type="number" className="bg-slate-700 rounded px-2 py-1 w-full" value={config.cpu_temp_threshold} onChange={e => setConfig(c=>({...c, cpu_temp_threshold: +e.target.value}))} /></div>
-          <div><label className="text-slate-400">VRAM (%)</label><input type="number" className="bg-slate-700 rounded px-2 py-1 w-full" value={config.vram_threshold} onChange={e => setConfig(c=>({...c, vram_threshold: +e.target.value}))} /></div>
+        <h3 className="font-semibold mb-3">Alert Thresholds</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+          <div><label className="text-slate-400">GPU Temp (°C)</label><input type="number" className="px-2 py-1 w-full" value={config.gpu_temp_threshold} onChange={e => setConfig(c=>({...c, gpu_temp_threshold: +e.target.value}))} /></div>
+          <div><label className="text-slate-400">CPU Temp (°C)</label><input type="number" className="px-2 py-1 w-full" value={config.cpu_temp_threshold} onChange={e => setConfig(c=>({...c, cpu_temp_threshold: +e.target.value}))} /></div>
+          <div><label className="text-slate-400">VRAM (%)</label><input type="number" className="px-2 py-1 w-full" value={config.vram_threshold} onChange={e => setConfig(c=>({...c, vram_threshold: +e.target.value}))} /></div>
         </div>
-        <button className="btn btn-primary text-xs mt-3" onClick={() => api('/gaming/alerts', {method:'PUT', body: JSON.stringify({gpu_temp_threshold: config.gpu_temp_threshold, cpu_temp_threshold: config.cpu_temp_threshold, vram_threshold: config.vram_threshold})})}>Save Alerts</button>
+        <button className="btn btn-primary text-xs mt-3" onClick={() => api('/gaming/alerts', {method:'PUT', body: JSON.stringify({gpu_temp_threshold: config.gpu_temp_threshold, cpu_temp_threshold: config.cpu_temp_threshold, vram_threshold: config.vram_threshold})}).then(() => notify('Alert thresholds saved')).catch(e => notify('Error: ' + e.message, 'error'))}>Save Alerts</button>
       </div>
 
       {status && status.alerts && status.alerts.length > 0 && (
@@ -598,7 +890,7 @@ function ThemeEditor() {
   const [wallpaperPreview, setWallpaperPreview] = useState('');
 
   useEffect(() => {
-    api('/config/theme').then(d => setTheme(d)).catch(() => {});
+    api('/config/theme').then(d => { setTheme(d); window.applyTheme(d); }).catch(() => {});
     api('/config/theme/presets').then(d => setPresets(d.presets || [])).catch(() => {});
   }, []);
 
@@ -613,7 +905,7 @@ function ThemeEditor() {
     };
     setTheme(newTheme);
     window.applyTheme(newTheme);
-    api('/config/theme', {method:'PUT', body: JSON.stringify(newTheme)}).then(() => {}).catch(e => alert('Error: ' + e.message));
+    api('/config/theme', {method:'PUT', body: JSON.stringify(newTheme)}).then(() => {}).catch(e => notify('Error: ' + e.message, 'error'));
   };
 
   const updateField = (key, value) => {
@@ -626,7 +918,7 @@ function ThemeEditor() {
 
   const saveTheme = () => {
     window.applyTheme(theme);
-    api('/config/theme', {method:'PUT', body: JSON.stringify(theme)}).then(() => alert('Theme saved!')).catch(e => alert('Error: ' + e.message));
+    api('/config/theme', {method:'PUT', body: JSON.stringify(theme)}).then(() => notify('Theme saved!')).catch(e => notify('Error: ' + e.message, 'error'));
   };
 
   const handleWallpaper = (e) => {
@@ -640,20 +932,21 @@ function ThemeEditor() {
     reader.readAsDataURL(file);
   };
 
-  if (!theme) return <div className="text-slate-400">Loading theme...</div>;
+  if (!theme) return <div className="text-slate-400 flex items-center gap-2"><span className="pulse-dot on"></span> Loading theme...</div>;
 
   return (
-    <div className="space-y-4">
-      <h2 className="text-xl font-bold">Visual Theme Editor</h2>
-      <p className="text-slate-400 text-sm">Customize color schemes, wallpapers, and text sizes.</p>
+    <div className="space-y-4 stagger">
+      <SectionHeader title="Visual Theme Editor" sub="Customize color schemes, wallpapers, and text sizes." />
 
       <div className="card">
         <h3 className="font-semibold mb-3">Color Presets</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
           {presets.map(p => (
             <button key={p.id} onClick={() => applyPreset(p)}
-              className={`p-3 rounded-lg border-2 text-left transition-all ${theme.preset === p.id ? 'border-cyan-400' : 'border-slate-600 hover:border-slate-400'}`}
-              style={{ background: p.bg, color: p.text }}>
+              className="p-3 rounded-xl border-2 text-left"
+              style={{ background: p.bg, color: p.text, borderColor: theme.preset === p.id ? p.accent : 'rgba(148,163,184,.25)', boxShadow: theme.preset === p.id ? `0 0 22px -4px ${p.accent}` : 'none', transition: 'transform .2s, box-shadow .3s, border-color .3s' }}
+              onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-3px) scale(1.02)'}
+              onMouseLeave={e => e.currentTarget.style.transform = 'none'}>
               <div className="font-bold text-sm">{p.name}</div>
               <div className="flex gap-1 mt-1">
                 <div className="w-4 h-4 rounded" style={{ background: p.accent }}></div>
@@ -668,12 +961,12 @@ function ThemeEditor() {
       <div className="card">
         <h3 className="font-semibold mb-3">Custom Colors</h3>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
-          <div><label className="text-slate-400 block mb-1">Accent Color</label><input type="color" value={theme.accent_color} onChange={e => updateField('accent_color', e.target.value)} className="w-full h-8 rounded cursor-pointer" /></div>
-          <div><label className="text-slate-400 block mb-1">Background</label><input type="color" value={theme.background} onChange={e => updateField('background', e.target.value)} className="w-full h-8 rounded cursor-pointer" /></div>
-          <div><label className="text-slate-400 block mb-1">Card Background</label><input type="color" value={theme.card_bg} onChange={e => updateField('card_bg', e.target.value)} className="w-full h-8 rounded cursor-pointer" /></div>
-          <div><label className="text-slate-400 block mb-1">Text Color</label><input type="color" value={theme.text_color} onChange={e => updateField('text_color', e.target.value)} className="w-full h-8 rounded cursor-pointer" /></div>
-          <div><label className="text-slate-400 block mb-1">Secondary Text</label><input type="color" value={theme.text_secondary} onChange={e => updateField('text_secondary', e.target.value)} className="w-full h-8 rounded cursor-pointer" /></div>
-          <div><label className="text-slate-400 block mb-1">Border Color</label><input type="color" value={theme.border_color} onChange={e => updateField('border_color', e.target.value)} className="w-full h-8 rounded cursor-pointer" /></div>
+          <div><label className="text-slate-400 block mb-1">Accent Color</label><input type="color" value={theme.accent_color} onChange={e => updateField('accent_color', e.target.value)} className="w-full h-9 rounded-lg cursor-pointer" /></div>
+          <div><label className="text-slate-400 block mb-1">Background</label><input type="color" value={theme.background} onChange={e => updateField('background', e.target.value)} className="w-full h-9 rounded-lg cursor-pointer" /></div>
+          <div><label className="text-slate-400 block mb-1">Card Background</label><input type="color" value={theme.card_bg} onChange={e => updateField('card_bg', e.target.value)} className="w-full h-9 rounded-lg cursor-pointer" /></div>
+          <div><label className="text-slate-400 block mb-1">Text Color</label><input type="color" value={theme.text_color} onChange={e => updateField('text_color', e.target.value)} className="w-full h-9 rounded-lg cursor-pointer" /></div>
+          <div><label className="text-slate-400 block mb-1">Secondary Text</label><input type="color" value={theme.text_secondary} onChange={e => updateField('text_secondary', e.target.value)} className="w-full h-9 rounded-lg cursor-pointer" /></div>
+          <div><label className="text-slate-400 block mb-1">Border Color</label><input type="color" value={theme.border_color} onChange={e => updateField('border_color', e.target.value)} className="w-full h-9 rounded-lg cursor-pointer" /></div>
         </div>
       </div>
 
@@ -689,7 +982,7 @@ function ThemeEditor() {
             </div>
           </div>
           {wallpaperPreview && (
-            <div className="w-32 h-20 rounded border border-slate-600 overflow-hidden">
+            <div className="w-32 h-20 rounded-xl border border-slate-600 overflow-hidden pop">
               <img src={wallpaperPreview} alt="preview" className="w-full h-full object-cover" />
             </div>
           )}
@@ -701,7 +994,7 @@ function ThemeEditor() {
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
           <div>
             <label className="text-slate-400 block mb-1">Font Size</label>
-            <select className="bg-slate-700 rounded px-2 py-1 w-full" value={theme.font_size} onChange={e => updateField('font_size', e.target.value)}>
+            <select className="px-2 py-1.5 w-full" value={theme.font_size} onChange={e => updateField('font_size', e.target.value)}>
               <option value="small">Small</option>
               <option value="medium">Medium</option>
               <option value="large">Large</option>
@@ -709,7 +1002,7 @@ function ThemeEditor() {
           </div>
           <div>
             <label className="text-slate-400 block mb-1">Card Style</label>
-            <select className="bg-slate-700 rounded px-2 py-1 w-full" value={theme.card_style} onChange={e => updateField('card_style', e.target.value)}>
+            <select className="px-2 py-1.5 w-full" value={theme.card_style} onChange={e => updateField('card_style', e.target.value)}>
               <option value="solid">Solid</option>
               <option value="glass">Glass (blur)</option>
               <option value="bordered">Bordered</option>
@@ -717,11 +1010,11 @@ function ThemeEditor() {
           </div>
           <div>
             <label className="text-slate-400 block mb-1">Border Radius</label>
-            <input type="number" className="bg-slate-700 rounded px-2 py-1 w-full" value={theme.border_radius} onChange={e => updateField('border_radius', parseInt(e.target.value))} />
+            <input type="number" className="px-2 py-1.5 w-full" value={theme.border_radius} onChange={e => updateField('border_radius', parseInt(e.target.value))} />
           </div>
           <div>
             <label className="text-slate-400 block mb-1">Sidebar Position</label>
-            <select className="bg-slate-700 rounded px-2 py-1 w-full" value={theme.sidebar_position} onChange={e => updateField('sidebar_position', e.target.value)}>
+            <select className="px-2 py-1.5 w-full" value={theme.sidebar_position} onChange={e => updateField('sidebar_position', e.target.value)}>
               <option value="left">Left</option>
               <option value="right">Right</option>
               <option value="top">Top (horizontal)</option>
@@ -732,7 +1025,7 @@ function ThemeEditor() {
 
       <div className="card">
         <h3 className="font-semibold mb-2">Live Preview</h3>
-        <div className="p-4 rounded-lg" style={{ background: theme.background, color: theme.text_color, border: '1px solid ' + theme.border_color }}>
+        <div className="p-4 rounded-xl" style={{ background: theme.background, color: theme.text_color, border: '1px solid ' + theme.border_color }}>
           <div className="text-lg font-bold" style={{ color: theme.accent_color }}>Accent Text</div>
           <div style={{ background: theme.card_bg, padding: '8px', borderRadius: theme.border_radius + 'px', marginTop: '8px' }}>
             <div style={{ color: theme.text_color }}>Card content text</div>
@@ -764,7 +1057,7 @@ function DeviceThemeEditor() {
   const applyPreset = (p) => {
     const newTheme = {...theme, bg_color: p.bg, text_color: p.text, accent_color: p.accent, secondary_color: p.secondary, warning_color: p.warning, success_color: p.success, danger_color: p.danger, header_bg: p.headerBg};
     setTheme(newTheme);
-    api('/config/device-theme', {method:'PUT', body: JSON.stringify(newTheme)}).then(() => alert('Theme applied: ' + p.name)).catch(e => alert('Error: ' + e.message));
+    api('/config/device-theme', {method:'PUT', body: JSON.stringify(newTheme)}).then(() => notify('Theme applied: ' + p.name)).catch(e => notify('Error: ' + e.message, 'error'));
   };
 
   const updateField = (key, value) => {
@@ -772,22 +1065,23 @@ function DeviceThemeEditor() {
   };
 
   const saveTheme = () => {
-    api('/config/device-theme', {method:'PUT', body: JSON.stringify(theme)}).then(() => alert('Device theme saved & pushed!')).catch(e => alert('Error: ' + e.message));
+    api('/config/device-theme', {method:'PUT', body: JSON.stringify(theme)}).then(() => notify('Device theme saved & pushed!')).catch(e => notify('Error: ' + e.message, 'error'));
   };
 
-  if (!theme) return <div className="text-slate-400">Loading...</div>;
+  if (!theme) return <div className="text-slate-400 flex items-center gap-2"><span className="pulse-dot on"></span> Loading...</div>;
 
   return (
-    <div className="space-y-4">
-      <h2 className="text-xl font-bold">Device Display Theme (TFT)</h2>
-      <p className="text-slate-400 text-sm">Configure colors for the ESP32 TFT display. Changes are pushed to the device immediately.</p>
+    <div className="space-y-4 stagger">
+      <SectionHeader title="Device Display Theme (TFT)" sub="Configure colors for the ESP32 TFT display. Changes are pushed to the device immediately." />
       <div className="card">
         <h3 className="font-semibold mb-3">Color Presets</h3>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
           {presets.map(p => (
             <button key={p.id} onClick={() => applyPreset(p)}
-              className="p-3 rounded-lg border-2 text-left transition-all border-slate-600 hover:border-slate-400"
-              style={{ background: p.bg, color: p.text }}>
+              className="p-3 rounded-xl border-2 text-left border-slate-600 hover:border-slate-400"
+              style={{ background: p.bg, color: p.text, transition: 'transform .2s, border-color .2s' }}
+              onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-3px) scale(1.03)'}
+              onMouseLeave={e => e.currentTarget.style.transform = 'none'}>
               <div className="font-bold text-sm">{p.name}</div>
               <div className="flex gap-1 mt-1">
                 <div className="w-4 h-4 rounded" style={{ background: p.accent }}></div>
@@ -805,25 +1099,25 @@ function DeviceThemeEditor() {
             <div key={key}>
               <label className="text-slate-400 block mb-1">{key.replace('_',' ')}</label>
               <div className="flex gap-2">
-                <input type="color" value={theme[key]} onChange={e => updateField(key, e.target.value)} className="w-10 h-8 rounded cursor-pointer" />
-                <input type="text" value={theme[key]} onChange={e => updateField(key, e.target.value)} className="bg-slate-700 rounded px-2 py-1 flex-1 text-xs mono" />
+                <input type="color" value={theme[key]} onChange={e => updateField(key, e.target.value)} className="w-10 h-9 rounded-lg cursor-pointer" />
+                <input type="text" value={theme[key]} onChange={e => updateField(key, e.target.value)} className="px-2 py-1 flex-1 text-xs mono" />
               </div>
             </div>
           ))}
         </div>
       </div>
       <div className="card">
-        <h3 className="font-semibold mb-2">Text Sizes</h3>
-        <div className="grid grid-cols-4 gap-3 text-sm">
-          <div><label className="text-slate-400">Title</label><input type="number" min="1" max="4" className="bg-slate-700 rounded px-2 py-1 w-full" value={theme.title_size} onChange={e => updateField('title_size', parseInt(e.target.value))} /></div>
-          <div><label className="text-slate-400">Body</label><input type="number" min="1" max="4" className="bg-slate-700 rounded px-2 py-1 w-full" value={theme.body_size} onChange={e => updateField('body_size', parseInt(e.target.value))} /></div>
-          <div><label className="text-slate-400">Big</label><input type="number" min="1" max="4" className="bg-slate-700 rounded px-2 py-1 w-full" value={theme.big_size} onChange={e => updateField('big_size', parseInt(e.target.value))} /></div>
-          <div><label className="text-slate-400">Timer</label><input type="number" min="1" max="4" className="bg-slate-700 rounded px-2 py-1 w-full" value={theme.timer_size} onChange={e => updateField('timer_size', parseInt(e.target.value))} /></div>
+        <h3 className="font-semibold mb-3">Text Sizes</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+          <div><label className="text-slate-400">Title</label><input type="number" min="1" max="4" className="px-2 py-1 w-full" value={theme.title_size} onChange={e => updateField('title_size', parseInt(e.target.value))} /></div>
+          <div><label className="text-slate-400">Body</label><input type="number" min="1" max="4" className="px-2 py-1 w-full" value={theme.body_size} onChange={e => updateField('body_size', parseInt(e.target.value))} /></div>
+          <div><label className="text-slate-400">Big</label><input type="number" min="1" max="4" className="px-2 py-1 w-full" value={theme.big_size} onChange={e => updateField('big_size', parseInt(e.target.value))} /></div>
+          <div><label className="text-slate-400">Timer</label><input type="number" min="1" max="4" className="px-2 py-1 w-full" value={theme.timer_size} onChange={e => updateField('timer_size', parseInt(e.target.value))} /></div>
         </div>
       </div>
       <div className="card">
         <h3 className="font-semibold mb-2">Live Preview (TFT)</h3>
-        <div className="p-3 rounded-lg" style={{ background: theme.bg_color, color: theme.text_color, border: '1px solid ' + theme.secondary_color, fontFamily: 'monospace', fontSize: '12px' }}>
+        <div className="p-3 rounded-xl" style={{ background: theme.bg_color, color: theme.text_color, border: '1px solid ' + theme.secondary_color, fontFamily: 'monospace', fontSize: '12px' }}>
           <div style={{ background: theme.header_bg, color: theme.header_text, padding: '2px 4px', marginBottom: '4px', fontSize: '12px' }}>HEADER</div>
           <div style={{ color: theme.accent_color, fontSize: (theme.title_size * 8 + 8) + 'px', fontWeight: 'bold' }}>Title Text</div>
           <div style={{ color: theme.text_color, fontSize: (theme.body_size * 8 + 8) + 'px' }}>Body text content</div>
@@ -841,63 +1135,90 @@ function DeviceThemeEditor() {
 // ─── Settings ─────────────────────────────────────────────
 function Settings() {
   return (
-    <div className="space-y-4">
-      <h2 className="text-xl font-bold">Dashboard Settings</h2>
+    <div className="space-y-4 stagger">
+      <SectionHeader title="Dashboard Settings" />
       <div className="card">
-        <h3 className="font-semibold mb-2">Serial / Device</h3>
+        <h3 className="font-semibold mb-3">Serial / Device</h3>
         <div className="grid grid-cols-2 gap-3 text-sm mb-3">
-          <div><label className="text-slate-400">COM Port</label><input className="bg-slate-700 rounded px-2 py-1 w-full" defaultValue="COM6" id="comPort" /></div>
-          <div><label className="text-slate-400">Baud Rate</label><input type="number" className="bg-slate-700 rounded px-2 py-1 w-full" defaultValue={115200} id="baudRate" /></div>
+          <div><label className="text-slate-400">COM Port</label><input className="px-2 py-1 w-full" defaultValue="COM6" id="comPort" /></div>
+          <div><label className="text-slate-400">Baud Rate</label><input type="number" className="px-2 py-1 w-full" defaultValue={115200} id="baudRate" /></div>
         </div>
-        <div className="flex gap-2 items-center">
+        <div className="flex flex-wrap gap-2 items-center">
           <button className="btn btn-primary" onClick={async () => {
             try {
               const r = await api('/device/connect', {method:'POST'});
-              alert('Device ' + (r.status || 'connected'));
-            } catch(e) { alert('Connect failed: ' + e.message); }
+              notify('Device ' + (r.status || 'connected'));
+            } catch(e) { notify('Connect failed: ' + e.message, 'error'); }
           }}>Connect Device</button>
           <button className="btn btn-secondary" onClick={async () => {
             try {
               await api('/device/disconnect', {method:'POST'});
-              alert('Device disconnected');
-            } catch(e) { alert('Disconnect failed: ' + e.message); }
+              notify('Device disconnected');
+            } catch(e) { notify('Disconnect failed: ' + e.message, 'error'); }
           }}>Disconnect Device</button>
           <button className="btn btn-secondary" onClick={async () => {
             try {
               const r = await api('/device/status');
-              alert('Status: ' + JSON.stringify(r));
-            } catch(e) { alert('Status failed: ' + e.message); }
+              notify('Status: ' + JSON.stringify(r));
+            } catch(e) { notify('Status failed: ' + e.message, 'error'); }
           }}>Check Status</button>
         </div>
       </div>
       <div className="card">
-        <h3 className="font-semibold mb-2">Polling Intervals (ms)</h3>
-        <div className="grid grid-cols-3 gap-3 text-sm">
-          <div><label className="text-slate-400">PC Metrics</label><input type="number" className="bg-slate-700 rounded px-2 py-1 w-full" defaultValue={1000} /></div>
-          <div><label className="text-slate-400">Sensor Data</label><input type="number" className="bg-slate-700 rounded px-2 py-1 w-full" defaultValue={2000} /></div>
-          <div><label className="text-slate-400">State Push</label><input type="number" className="bg-slate-700 rounded px-2 py-1 w-full" defaultValue={500} /></div>
+        <h3 className="font-semibold mb-3">Polling Intervals (ms)</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+          <div><label className="text-slate-400">PC Metrics</label><input type="number" className="px-2 py-1 w-full" defaultValue={1000} /></div>
+          <div><label className="text-slate-400">Sensor Data</label><input type="number" className="px-2 py-1 w-full" defaultValue={2000} /></div>
+          <div><label className="text-slate-400">State Push</label><input type="number" className="px-2 py-1 w-full" defaultValue={500} /></div>
         </div>
       </div>
       <div className="card">
-        <h3 className="font-semibold mb-2">Display</h3>
-        <div className="grid grid-cols-2 gap-3 text-sm">
-          <div><label className="text-slate-400">TFT Brightness (0-255)</label><input type="number" className="bg-slate-700 rounded px-2 py-1 w-full" defaultValue={220} /></div>
-          <div><label className="text-slate-400">OLED Contrast (0-255)</label><input type="number" className="bg-slate-700 rounded px-2 py-1 w-full" defaultValue={255} /></div>
+        <h3 className="font-semibold mb-3">Display</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+          <div><label className="text-slate-400">TFT Brightness (0-255)</label><input type="number" className="px-2 py-1 w-full" defaultValue={220} /></div>
+          <div><label className="text-slate-400">OLED Contrast (0-255)</label><input type="number" className="px-2 py-1 w-full" defaultValue={255} /></div>
         </div>
       </div>
       <div className="card">
-        <h3 className="font-semibold mb-2">Lyrics</h3>
-        <div className="grid grid-cols-2 gap-3 text-sm">
+        <h3 className="font-semibold mb-3">Lyrics</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
           <label className="flex items-center gap-2"><input type="checkbox" defaultChecked /> Enable LRCLIB sync</label>
-          <div><label className="text-slate-400">Sync offset (ms)</label><input type="number" className="bg-slate-700 rounded px-2 py-1 w-full" defaultValue={500} id="lyricsOffset" /></div>
+          <div><label className="text-slate-400">Sync offset (ms)</label><input type="number" className="px-2 py-1 w-full" defaultValue={500} id="lyricsOffset" /></div>
         </div>
       </div>
       <button className="btn btn-primary" onClick={async () => {
         try {
           await api('/config/settings', {method:'PUT', body: JSON.stringify({settings: {lyrics_sync_offset_ms: parseInt(document.getElementById('lyricsOffset').value) || 500}})});
-          alert('Settings saved!');
-        } catch(e) { alert('Error: ' + e.message); }
+          notify('Settings saved!');
+        } catch(e) { notify('Error: ' + e.message, 'error'); }
       }}>Save Settings</button>
+    </div>
+  );
+}
+
+// ─── Toast stack ──────────────────────────────────────────
+function Toasts() {
+  const [items, setItems] = useState([]);
+  useEffect(() => {
+    const h = (e) => {
+      const id = Date.now() + Math.random();
+      setItems(list => [...list.slice(-3), { id, ...e.detail }]);
+      setTimeout(() => setItems(list => list.map(t => t.id === id ? { ...t, leaving: true } : t)), 3200);
+      setTimeout(() => setItems(list => list.filter(t => t.id !== id)), 3500);
+    };
+    window.addEventListener('db-toast', h);
+    return () => window.removeEventListener('db-toast', h);
+  }, []);
+  return (
+    <div className="fixed top-4 right-4 z-50 flex flex-col gap-2 w-80 max-w-[calc(100vw-2rem)]">
+      {items.map(t => (
+        <div key={t.id} className={'toast relative overflow-hidden rounded-xl px-4 py-3 text-sm font-medium flex items-start gap-3 ' + (t.leaving ? 'leaving' : '')}
+          style={{ background: t.type === 'error' ? 'rgba(127,29,29,.85)' : 'rgba(6,78,59,.85)', border: '1px solid ' + (t.type === 'error' ? 'rgba(248,113,113,.4)' : 'rgba(52,211,153,.4)'), color: '#fff' }}>
+          <span>{t.type === 'error' ? '⚠️' : '✅'}</span>
+          <span className="break-words min-w-0">{t.msg}</span>
+          <span className="absolute bottom-0 left-0 h-0.5 w-full origin-left" style={{ background: t.type === 'error' ? '#f87171' : '#34d399', animation: 'bar 3.2s linear forwards' }}></span>
+        </div>
+      ))}
     </div>
   );
 }
@@ -916,13 +1237,16 @@ const TABS = [
   { id: 'settings', label: 'Settings', icon: '⚙️' },
 ];
 
+function hexToRgb(hex) {
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex || '');
+  return m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)].join(',') : '6,182,212';
+}
+
 function App() {
   const [tab, setTab] = useState('dashboard');
   const [state, setState] = useState({});
   const [metrics, setMetrics] = useState({});
-  const [toast, setToast] = useState(null);
   const [theme, setTheme] = useState(null);
-  const showToast = (msg, type='success') => { setToast({msg, type}); setTimeout(() => setToast(null), 3000); };
   const refreshState = () => { api('/companion/device-state').then(d => setState(s => ({...s, ...d, m_art: s.m_art, batt_v: s.batt_v, batt: s.batt}))).catch(() => {}); api('/desktop/music/status').then(d => setState(s => ({...s, m_title: d.title, m_artist: d.artist, m_art: d.album_art_url || s.m_art, m_play: d.playing ? 1 : 0, m_prog: Math.floor(d.progress_ms/1000), m_dur: Math.floor(d.duration_ms/1000)}))).catch(() => {}); };
 
   // Load and apply theme
@@ -934,15 +1258,14 @@ function App() {
   }, []);
 
   window.applyTheme = (t) => {
-    const bg = t.background || '#0f172a';
-    const cardBg = t.card_bg || '#1e293b';
+    const bg = t.background || '#070b14';
+    const cardBg = t.card_bg || '#111a2e';
     const text = t.text_color || '#e2e8f0';
     const textSec = t.text_secondary || '#94a3b8';
-    const border = t.border_color || '#334155';
+    const border = t.border_color || '#25324d';
     const accent = t.accent_color || '#06b6d4';
-    const radius = (t.border_radius || 12) + 'px';
+    const radius = (t.border_radius || 16) + 'px';
 
-    // Set CSS variables
     const root = document.documentElement;
     root.style.setProperty('--bg', bg);
     root.style.setProperty('--card-bg', cardBg);
@@ -950,9 +1273,9 @@ function App() {
     root.style.setProperty('--text-secondary', textSec);
     root.style.setProperty('--border', border);
     root.style.setProperty('--accent', accent);
+    root.style.setProperty('--accent-rgb', hexToRgb(accent));
     root.style.setProperty('--radius', radius);
 
-    // Apply body styles
     document.body.style.background = bg;
     document.body.style.color = text;
     if (t.wallpaper) {
@@ -964,7 +1287,7 @@ function App() {
       document.body.style.backgroundImage = 'none';
     }
 
-    // Inject overriding style tag for Tailwind classes
+    // Text/accent overrides for Tailwind utility classes (surfaces are handled by CSS variables)
     let styleTag = document.getElementById('theme-override');
     if (!styleTag) {
       styleTag = document.createElement('style');
@@ -972,25 +1295,17 @@ function App() {
       document.head.appendChild(styleTag);
     }
     styleTag.textContent = `
-      .bg-slate-900 { background-color: ${bg} !important; }
-      .bg-slate-800 { background-color: ${cardBg} !important; }
-      .bg-slate-700 { background-color: ${cardBg} !important; filter: brightness(1.1); }
       .text-slate-400 { color: ${textSec} !important; }
       .text-slate-500 { color: ${textSec} !important; opacity: 0.7; }
       .text-white, .text-slate-200, .text-slate-300 { color: ${text} !important; }
+      .text-cyan-400, .text-cyan-300 { color: ${accent} !important; }
       .border-slate-700, .border-slate-600 { border-color: ${border} !important; }
-      .text-cyan-400 { color: ${accent} !important; }
-      .bg-cyan-500\\/20 { background-color: ${accent}33 !important; }
-      .card { background: ${cardBg} !important; border-color: ${border} !important; border-radius: ${radius} !important; }
-      button.btn-primary { background: ${accent} !important; color: ${bg} !important; }
-      input, select, textarea { background: ${cardBg} !important; color: ${text} !important; border-color: ${border} !important; }
     `;
   };
 
   useWebSocket((msg) => {
     if (msg.channel === 'deskbuddy_state' || msg.type === 'deskbuddy_state') {
       const d = msg.data || msg;
-      // Map summary fields to device-state field names
       setState(prev => ({
         ...prev,
         dev_online: d.device?.online ? 1 : (d.dev_online ?? prev.dev_online),
@@ -1041,7 +1356,7 @@ function App() {
   useEffect(() => {
     const poll = () => {
       api('/system/metrics').then(d => setMetrics(d)).catch(() => {});
-      api('/companion/device-state').then(d => setState(d)).catch(() => {});
+      api('/companion/device-state').then(d => setState(s => ({...s, ...d, m_art: s.m_art, batt_v: s.batt_v, batt: s.batt}))).catch(() => {});
     };
     poll();
     const id = setInterval(poll, 1000);
@@ -1050,37 +1365,41 @@ function App() {
 
   return (
     <div className="min-h-screen">
-      {toast && <div className={`fixed top-4 right-4 z-50 px-4 py-2 rounded-lg text-sm font-medium ${toast.type === 'error' ? 'bg-red-500/90 text-white' : 'bg-green-500/90 text-white'}`}>{toast.msg}</div>}
-      <header className="bg-slate-900 border-b border-slate-700 px-4 py-3 flex items-center justify-between">
+      <Toasts />
+      <header className="sticky top-0 z-40 px-4 md:px-6 py-3 flex items-center justify-between border-b"
+        style={{ background: 'color-mix(in srgb, var(--bg) 70%, transparent)', backdropFilter: 'blur(18px) saturate(150%)', WebkitBackdropFilter: 'blur(18px) saturate(150%)', borderColor: 'color-mix(in srgb, var(--border) 70%, transparent)' }}>
         <div className="flex items-center gap-3">
-          <span className="text-2xl">🤖</span>
-          <span className="text-lg font-bold">DeskBuddy Control Panel</span>
+          <span className="text-2xl float wiggle inline-block cursor-default">🤖</span>
+          <span className="text-lg font-extrabold tracking-tight">DeskBuddy <span className="gradient-text">Control Panel</span></span>
         </div>
-        <div className="flex items-center gap-2 text-sm text-slate-400">
-          <span className={`w-2 h-2 rounded-full ${state.dev_online ? 'bg-green-400' : 'bg-red-400'}`}></span>
-          {state.dev_online ? 'Device Online' : 'Device Offline'}
+        <div className="flex items-center gap-2 text-sm px-3 py-1.5 rounded-full"
+          style={{ background: 'rgba(148,163,184,.1)', border: '1px solid rgba(148,163,184,.15)' }}>
+          <span className={'pulse-dot ' + (state.dev_online ? 'on' : 'off')}></span>
+          <span className="text-slate-300">{state.dev_online ? 'Device Online' : 'Device Offline'}</span>
         </div>
       </header>
-      <div className="flex">
-        <nav className="w-48 bg-slate-900 border-r border-slate-700 min-h-screen p-2 space-y-1">
+      <div className="flex flex-col md:flex-row">
+        <nav className="flex md:flex-col gap-1 p-2 md:p-3 overflow-x-auto md:overflow-visible md:w-56 shrink-0 md:sticky md:top-[61px] md:h-[calc(100vh-61px)] md:overflow-y-auto border-b md:border-b-0 md:border-r"
+          style={{ background: 'color-mix(in srgb, var(--bg) 45%, transparent)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', borderColor: 'color-mix(in srgb, var(--border) 60%, transparent)' }}>
           {TABS.map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)}
-              className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 ${tab === t.id ? 'bg-cyan-500/20 text-cyan-400' : 'text-slate-400 hover:bg-slate-800'}`}>
-              <span>{t.icon}</span> {t.label}
+            <button key={t.id} onClick={() => setTab(t.id)} className={'nav-item ' + (tab === t.id ? 'active' : '')}>
+              <span className="nav-icon">{t.icon}</span> {t.label}
             </button>
           ))}
         </nav>
-        <main className="flex-1 p-4 md:p-6 max-w-5xl">
-          {tab === 'dashboard' && <Dashboard state={state} metrics={metrics} />}
-          {tab === 'expressions' && <Expressions />}
-          {tab === 'buttons' && <ButtonMappings />}
-          {tab === 'notifications' && <Notifications />}
-          {tab === 'sensors' && <SensorGraphs />}
-          {tab === 'inspection' && <InspectionModels />}
-          {tab === 'gaming' && <GamingMode />}
-          {tab === 'theme' && <ThemeEditor />}
-          {tab === 'device-theme' && <DeviceThemeEditor />}
-          {tab === 'settings' && <Settings />}
+        <main className="flex-1 p-4 md:p-8 max-w-6xl w-full min-w-0">
+          <div key={tab} className="page-enter">
+            {tab === 'dashboard' && <Dashboard state={state} metrics={metrics} setState={setState} refreshState={refreshState} />}
+            {tab === 'expressions' && <Expressions />}
+            {tab === 'buttons' && <ButtonMappings />}
+            {tab === 'notifications' && <Notifications />}
+            {tab === 'sensors' && <SensorGraphs />}
+            {tab === 'inspection' && <InspectionModels />}
+            {tab === 'gaming' && <GamingMode />}
+            {tab === 'theme' && <ThemeEditor />}
+            {tab === 'device-theme' && <DeviceThemeEditor />}
+            {tab === 'settings' && <Settings />}
+          </div>
         </main>
       </div>
     </div>
