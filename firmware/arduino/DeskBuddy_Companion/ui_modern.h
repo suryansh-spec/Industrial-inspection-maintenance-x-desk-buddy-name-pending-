@@ -31,13 +31,13 @@
 #define UI_PI 3.14159265f
 #define UI_HALF_PI 1.57079633f
 #define UI_TWO_PI 6.28318531f
-#define UI_COVER 72             // upscaled album art size on the music page
+#define UI_COVER 56             // downscaled album art size on the music page (was 72)
 #define UI_MQ_W 112
 
 #define F_REG  (&FreeSans9pt7b)
 #define F_BOLD (&FreeSansBold9pt7b)
 #define F_BIG  (&FreeSansBold12pt7b)
-#define F_HUGE (&FreeSansBold18pt7b)
+#define F_HUGE (&FreeSansBold12pt7b)  // was 18pt - too large for 128x160
 
 // ----------------------------------------------------------------------------
 // Core state
@@ -400,7 +400,7 @@ static void uiTopBar(const char* title) {
 
 static float uiPageF = 0;
 static void uiPageDots() {
-  const int n = PAGE_COUNT, gap = 11, y = 154;
+  const int n = PAGE_COUNT, gap = 11, y = 148;
   uiSmooth(uiPageF, (float)page, 14.0f);
   int x0 = 64 - ((n - 1) * gap) / 2;
   for (int i = 0; i < n; i++) uiDisc(x0 + i * gap, y, 1.7f, theme.secondary, 110);
@@ -537,35 +537,35 @@ void drawHome() {
   if (colon) { size_t n = colon - clk; if (n > 5) n = 5; memcpy(hh, clk, n); hh[n] = 0; strncpy(mm, colon + 1, 5); mm[5] = 0; }
   int wH = uiW(hh, F_HUGE), wC = uiW(":", F_HUGE);
   int x = 8;
-  uiText(x, 52, hh, F_HUGE, theme.text);
+  uiText(x, 44, hh, F_HUGE, theme.text);       // was 52 -> 44
   float pulse = 0.35f + 0.65f * (0.5f + 0.5f * sinf(uiNowMs / 320.0f));
-  uiText(x + wH + 3, 50, ":", F_HUGE, uiFade(theme.accent, pulse));
-  uiText(x + wH + wC + 8, 52, mm, F_HUGE, theme.text);
+  uiText(x + wH + 3, 42, ":", F_HUGE, uiFade(theme.accent, pulse)); // was 50 -> 42
+  uiText(x + wH + wC + 8, 44, mm, F_HUGE, theme.text);               // was 52 -> 44
 
   if (state.unread > 0) {
     float pr = 1.0f + 0.12f * sinf(uiNowMs / 260.0f);
-    uiDisc(112, 40, 9.5f * pr, theme.warning);
+    uiDisc(112, 34, 9.5f * pr, theme.warning);   // was 40 -> 34
     char n[6]; snprintf(n, sizeof(n), "%d", state.unread > 9 ? 9 : state.unread);
-    uiText(112, 45, n, F_BOLD, theme.bg, 1);
+    uiText(112, 39, n, F_BOLD, theme.bg, 1);     // was 45 -> 39
   }
 
   char dl[40]; snprintf(dl, sizeof(dl), "%s %s", state.dowText, state.dateText[0] ? state.dateText : "--");
-  uiTextFit(8, 68, dl, F_REG, theme.secondary, 112);
+  uiTextFit(8, 60, dl, F_REG, theme.secondary, 112);  // was 68 -> 60
 
   const char* act = activityLabel();
   if (act[0]) {
-    int w = uiPill(8, 75, 18, act, F_BOLD, theme.warning, uiLerp(theme.bg, theme.warning, 46));
+    int w = uiPill(8, 68, 18, act, F_BOLD, theme.warning, uiLerp(theme.bg, theme.warning, 46)); // was 75 -> 68
     (void)w;
   }
-  uiTextFit(8, 107, state.appName[0] ? state.appName : "Waiting for PC...", F_REG, theme.text, 112);
+  uiTextFit(8, 95, state.appName[0] ? state.appName : "Waiting for PC...", F_REG, theme.text, 112); // was 107 -> 95
 
   char t[16], h[16];
   if (isnan(sensors.temperature)) snprintf(t, sizeof(t), "--.-C"); else snprintf(t, sizeof(t), "%.1fC", sensors.temperature);
   if (isnan(sensors.humidity)) snprintf(h, sizeof(h), "--%%"); else snprintf(h, sizeof(h), "%.0f%%", sensors.humidity);
-  uiChip(8, 112, 54, theme.accent, t);
-  uiChip(66, 112, 54, theme.success, h);
+  uiChip(8, 100, 54, theme.accent, t);   // was 112 -> 100
+  uiChip(66, 100, 54, theme.success, h); // was 112 -> 100
 
-  uiNowPlayingCard(134);
+  uiNowPlayingCard(120);  // was 134 -> 120
   uiPageDots();
 }
 
@@ -591,17 +591,17 @@ void drawMusicPage() {
   if (strcmp(uiLastTitle, state.musicTitle) != 0) { strncpy(uiLastTitle, state.musicTitle, sizeof(uiLastTitle) - 1); uiProg = -1; }
 
   uiSmooth(uiPlayT, state.musicPlaying ? 1.0f : 0.0f, 9.0f);
-  const int cx = (UI_W - UI_COVER) / 2, cy = 21;
+  const int cx = (UI_W - UI_COVER) / 2, cy = 18;
 
   // soft halo that breathes while playing
   float breathe = 0.5f + 0.5f * sinf(uiNowMs / 480.0f);
-  for (int i = 4; i >= 1; i--)
+  for (int i = 3; i >= 1; i--)
     uiCard(cx - i * 3, cy - i * 3, UI_COVER + i * 6, UI_COVER + i * 6, 10 + i * 3, accent, accent, 0,
-           (uint8_t)((7 + 7 * breathe * uiPlayT) * (5 - i) * (0.35f + 0.65f * uiPlayT)));
+           (uint8_t)((7 + 7 * breathe * uiPlayT) * (4 - i) * (0.35f + 0.65f * uiPlayT)));
 
   float dim = (1.0f - uiPlayT) * 0.55f;
   if (uiCoverReady && uiCoverBig) {
-    const float R = 10.0f;
+    const float R = 8.0f;
     uint8_t dimA = (uint8_t)(dim * 255);
     for (int yy = 0; yy < UI_COVER; yy++) {
       for (int xx = 0; xx < UI_COVER; xx++) {
@@ -619,29 +619,30 @@ void drawMusicPage() {
       }
     }
   } else {
-    uiCard(cx, cy, UI_COVER, UI_COVER, 10, uiLerp(theme.bg, accent, 70), accent, 60);
-    uiNoteGlyph(cx + 34, cy + 46, accent);
+    uiCard(cx, cy, UI_COVER, UI_COVER, 8, uiLerp(theme.bg, accent, 70), accent, 60);
+    uiNoteGlyph(cx + UI_COVER/2 - 4, cy + UI_COVER/2 + 6, accent);
   }
   // pause badge fades in over the cover
   if (uiPlayT < 0.98f) {
     uint8_t a = (uint8_t)((1.0f - uiPlayT) * 235);
-    uiCard(cx + 25, cy + 22, 7, 28, 3, theme.text, theme.text, 0, a);
-    uiCard(cx + 40, cy + 22, 7, 28, 3, theme.text, theme.text, 0, a);
+    int px = cx + UI_COVER/2 - 7;
+    uiCard(px, cy + UI_COVER/2 - 7, 5, 18, 2, theme.text, theme.text, 0, a);
+    uiCard(px + 12, cy + UI_COVER/2 - 7, 5, 18, 2, theme.text, theme.text, 0, a);
   }
 
-  uiMarquee(8, 110, 112, state.musicTitle, F_BOLD, theme.text, theme.bg, true);
-  uiTextFit(64, 124, state.musicArtist[0] ? state.musicArtist : "Unknown artist", F_REG, theme.secondary, 112, 1);
+  uiMarquee(8, 94, 112, state.musicTitle, F_BOLD, theme.text, theme.bg, true);
+  uiTextFit(64, 108, state.musicArtist[0] ? state.musicArtist : "Unknown artist", F_REG, theme.secondary, 112, 1);
 
   float target = state.musicDuration > 0 ? uiClamp01((float)state.musicProgress / state.musicDuration) : 0.0f;
   if (uiProg < 0) uiProg = target;
   uiSmooth(uiProg, target, 6.0f);
-  uiCard(8, 131, 112, 4, 2, uiTrackCol(), uiTrackCol(), 0);
-  if (uiProg > 0.002f) uiCard(8, 131, fmaxf(4.0f, 112 * uiProg), 4, 2, accent, accent, 0);
-  uiDisc(8 + 112 * uiProg, 133, 4.2f, theme.text);
+  uiCard(8, 115, 112, 4, 2, uiTrackCol(), uiTrackCol(), 0);
+  if (uiProg > 0.002f) uiCard(8, 115, fmaxf(4.0f, 112 * uiProg), 4, 2, accent, accent, 0);
+  uiDisc(8 + 112 * uiProg, 117, 4.2f, theme.text);
 
   char a[12], b[12]; uiFmtTime(state.musicProgress, a, sizeof(a)); uiFmtTime(state.musicDuration, b, sizeof(b));
-  uiText(8, 148, a, F_REG, theme.secondary, 0);
-  uiText(120, 148, b, F_REG, theme.secondary, 2);
+  uiText(8, 132, a, F_REG, theme.secondary, 0);
+  uiText(120, 132, b, F_REG, theme.secondary, 2);
   uiPageDots();
 }
 
@@ -697,7 +698,7 @@ void drawLyricsPage() {
   int block = lyN * 18, first = 96 - block / 2 + 13 + slide;
   for (int i = 0; i < lyN; i++)
     uiText(64, first + i * 18, lyLines[i], F_BOLD, uiFade(accent, 0.25f + 0.75f * t), 1);
-  uiTextFit(64, 146 + slide / 2, state.lyricNext, F_REG, uiFade(theme.text, 0.38f * t + 0.1f), 112, 1);
+  uiTextFit(64, 142 + slide / 2, state.lyricNext, F_REG, uiFade(theme.text, 0.38f * t + 0.1f), 112, 1);
   uiPageDots();
 }
 
@@ -743,8 +744,8 @@ void drawPcPage() {
   const int xs[3] = {24, 64, 104};
   for (int i = 0; i < 3; i++) {
     char t[10]; if (raw[i] < 0) snprintf(t, sizeof(t), "--"); else snprintf(t, sizeof(t), "%d%%", (int)(vals[i] + 0.5f));
-    uiText(xs[i], 137, t, F_BOLD, cols[i], 1);
-    uiText(xs[i], 150, names[i], F_REG, i == idx ? theme.text : theme.secondary, 1);
+    uiText(xs[i], 144, t, F_BOLD, cols[i], 1);
+    uiText(xs[i], 154, names[i], F_REG, i == idx ? theme.text : theme.secondary, 1);
   }
   uiPageDots();
 }
@@ -802,7 +803,7 @@ void drawEnvPage() {
   if (bp == -2) snprintf(bl, sizeof(bl), "USB power");
   else if (bp == -1) snprintf(bl, sizeof(bl), "No battery");
   else snprintf(bl, sizeof(bl), "%.1fV  %d%%", sensors.batteryVoltage, bp);
-  uiText(64, 150, bl, F_REG, theme.secondary, 1);
+  uiText(64, 144, bl, F_REG, theme.secondary, 1);
   uiPageDots();
 }
 
@@ -857,7 +858,7 @@ void drawNotificationsPage() {
   char f[32];
   if (noteCount > shown) snprintf(f, sizeof(f), "+%d more  -  SELECT: read", noteCount - shown);
   else snprintf(f, sizeof(f), "SELECT: mark as read");
-  uiText(64, 148, f, F_REG, theme.secondary, 1);
+  uiText(64, 142, f, F_REG, theme.secondary, 1);
   uiPageDots();
 }
 
@@ -900,7 +901,7 @@ void drawPomodoroPage() {
   uint16_t sc = pomodoro.running ? theme.success : theme.warning;
   int pw = uiW(st, F_BOLD) + 20;
   uiPill(64 - pw / 2, 122, 17, st, F_BOLD, sc, uiLerp(theme.bg, sc, 44), 10);
-  uiText(64, 149, pomodoro.running ? "SELECT: pause" : "SELECT: start", F_REG, theme.secondary, 1);
+  uiText(64, 142, pomodoro.running ? "SELECT: pause" : "SELECT: start", F_REG, theme.secondary, 1);
   uiPageDots();
 }
 
@@ -934,7 +935,7 @@ void drawInspectionPage() {
     uiText(36, 108, pb, F_BOLD, theme.text, 1);
     uiText(92, 94, "WORST AXIS", F_REG, theme.secondary, 1);
     uiText(92, 124, inspectResultAxis, F_HUGE, c, 1);
-    uiText(64, 150, "SELECT: new capture", F_REG, theme.secondary, 1);
+    uiText(64, 144, "SELECT: new capture", F_REG, theme.secondary, 1);
     return;
   }
   if (inspectCapturing) {
@@ -967,8 +968,8 @@ void drawInspectionPage() {
   float p = 0.5f + 0.5f * sinf(uiNowMs / 380.0f);
   uiDisc(22, 136, 3.0f + p, theme.accent, 70);
   uiDisc(22, 136, 3.0f, theme.accent);
-  uiText(32, 141, "SELECT: start capture", F_REG, theme.text);
-  uiText(32, 156, "MODE: back to desk", F_REG, theme.secondary);
+  uiText(32, 138, "SELECT: start capture", F_REG, theme.text);
+  uiText(32, 150, "MODE: back to desk", F_REG, theme.secondary);
 }
 
 // ----------------------------------------------------------------------------
@@ -1012,10 +1013,11 @@ static inline bool uiRowDiff(const uint16_t* a, const uint16_t* b) {
 
 // Push only the rows that changed since the previous push. A static UI then
 // costs a few hundred microseconds of SPI instead of a fixed 16.6 ms.
+// During transitions we always push the full frame to avoid tearing.
 static void uiPush(const uint16_t* buf) {
   if (!uiLastPush) uiLastPush = (uint16_t*)(psramFound() ? ps_malloc(UI_W * UI_H * sizeof(uint16_t))
                                                         : malloc(UI_W * UI_H * sizeof(uint16_t)));
-  if (!uiLastPush || !uiPushValid) {
+  if (!uiLastPush || !uiPushValid || uiTransActive) {
     tft.drawRGBBitmap(0, 0, (uint16_t*)buf, UI_W, UI_H);
     if (uiLastPush) { memcpy(uiLastPush, buf, UI_W * UI_H * sizeof(uint16_t)); uiPushValid = true; }
     return;
