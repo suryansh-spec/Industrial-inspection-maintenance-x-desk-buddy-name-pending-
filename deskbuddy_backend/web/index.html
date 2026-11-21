@@ -923,7 +923,7 @@ function App() {
   const [toast, setToast] = useState(null);
   const [theme, setTheme] = useState(null);
   const showToast = (msg, type='success') => { setToast({msg, type}); setTimeout(() => setToast(null), 3000); };
-  const refreshState = () => { api('/companion/device-state').then(d => setState(d)).catch(() => {}); api('/desktop/music/status').then(d => setState(s => ({...s, m_title: d.title, m_artist: d.artist, m_art: d.album_art_url || s.m_art, m_play: d.playing ? 1 : 0, m_prog: Math.floor(d.progress_ms/1000), m_dur: Math.floor(d.duration_ms/1000)}))).catch(() => {}); };
+  const refreshState = () => { api('/companion/device-state').then(d => setState(s => ({...s, ...d, m_art: s.m_art, batt_v: s.batt_v, batt: s.batt}))).catch(() => {}); api('/desktop/music/status').then(d => setState(s => ({...s, m_title: d.title, m_artist: d.artist, m_art: d.album_art_url || s.m_art, m_play: d.playing ? 1 : 0, m_prog: Math.floor(d.progress_ms/1000), m_dur: Math.floor(d.duration_ms/1000)}))).catch(() => {}); };
 
   // Load and apply theme
   useEffect(() => {
