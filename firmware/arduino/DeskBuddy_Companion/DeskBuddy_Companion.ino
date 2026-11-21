@@ -1884,137 +1884,328 @@ void drawEyes(unsigned long now) {
   }
 
   switch (currentExpr) {
-    case EXPR_HAPPY:
-      drawEye(40, 30, 34, 26, 10, px, py, 6, 0, 45);
-      drawEye(88, 30, 34, 26, 10, px, py, 6, 0, 45);
-      break;
 
-    case EXPR_LAUGHING:
-      drawEye(40, 30, 34, 26, 10, px, py, 6, 0, 50);
-      drawEye(88, 30, 34, 26, 10, px, py, 6, 0, 50);
+    // ── HAPPY: wide bright eyes, lifted lid, subtle bounce ──────────────────
+    case EXPR_HAPPY: {
+      int ey = 30 + breatheY + musicBounce;
+      drawEye(40, ey, 36, 28, 10, px, py, 7, 0, 38);
+      drawEye(88, ey, 36, 28, 10, px, py, 7, 0, 38);
+      // Small upward-curved mouth arc
       oled.setDrawColor(1);
-      oled.drawCircle(64, 51, 5);
-      oled.drawDisc(64, 53, 2);
+      for (int i = -8; i <= 8; i++) {
+        int my = 55 - (int)(0.07f * i * i);
+        oled.drawPixel(64 + i, my);
+      }
       break;
+    }
 
-    case EXPR_EXCITED:
-      drawEye(40, 31, 36, 28, 10, px, py, 6, 0, 40);
-      drawEye(88, 31, 36, 28, 10, px, py, 6, 0, 40);
-      drawSparkle(18, 22);
-      drawSparkle(110, 22);
-      drawSparkle(64, 13);
+    // ── LAUGHING: squinted, big mouth, body shake ────────────────────────────
+    case EXPR_LAUGHING: {
+      int shake = (int)(sin(now / 80.0f) * 2.0f);
+      int ey = 30 + breatheY + shake;
+      drawEye(40 + shake, ey, 34, 24, 9, px, py, 6, 0, 56);
+      drawEye(88 + shake, ey, 34, 24, 9, px, py, 6, 0, 56);
+      // Open laugh mouth — ellipse outline
+      oled.setDrawColor(1);
+      oled.drawEllipse(64, 55, 9, 5, U8G2_DRAW_ALL);
+      oled.setDrawColor(0);
+      oled.drawDisc(64, 55, 5);   // hollow inside
+      oled.setDrawColor(1);
+      oled.drawStr(100, 48, "ha");
       break;
+    }
 
-    case EXPR_SURPRISED:
-      drawEye(40, 32, 42, 34, 13, px / 2, py / 2, 4, 0, 0);
-      drawEye(88, 32, 42, 34, 13, px / 2, py / 2, 4, 0, 0);
-      drawBrows(40, 32, false, true);
-      drawBrows(88, 32, false, true);
-      break;
-
-    case EXPR_ANGRY:
-      drawEye(40, 33, 36, 26, 10, px, py, 5, 0, 0);
-      drawEye(88, 33, 36, 26, 10, px, py, 5, 0, 0);
-      drawBrows(40, 33, true, false);
-      drawBrows(88, 33, true, false);
-      break;
-
-    case EXPR_SAD:
-      drawEye(40, 34, 36, 26, 10, px, py + 2, 6, 18, 0);
-      drawEye(88, 34, 36, 26, 10, px, py + 2, 6, 18, 0);
-      drawBrows(40, 34, false, false);
-      drawBrows(88, 34, false, false);
-      break;
-
-    case EXPR_SLEEPY:
-      drawEye(40, 34, 36, 26, 10, px, py + 2, 6, 42, 0);
-      drawEye(88, 34, 36, 26, 10, px, py + 2, 6, 42, 0);
-      break;
-
-    case EXPR_SLEEPING:
-      drawClosedEye(40, 32, 34);
-      drawClosedEye(88, 32, 34);
-      oled.setFont(u8g2_font_10x20_tf);
-      oled.drawStr(108, 28, "z");
-      break;
-
-    case EXPR_THINKING:
-      drawEye(40, 32, 36, 28, 10, -4, -3, 6, 0, 0);
-      drawEye(88, 33, 36, 28, 10, -2, -5, 6, 35, 0);
-      oled.setFont(u8g2_font_6x10_tf);
-      oled.drawStr(48, 54, ". . .");
-      break;
-
-    case EXPR_CURIOUS:
-      drawEye(40, 32, 36, 28, 10, px + 5, py - 1, 6, 0, 0);
-      drawEye(88, 32, 36, 28, 10, px + 5, py - 1, 6, 0, 0);
-      drawBrows(88, 32, false, true);
-      break;
-
-    case EXPR_CONFUSED:
-      drawEye(40, 33, 36, 28, 10, -5, 1, 6, 30, 0);
-      drawEye(88, 32, 40, 30, 12, 5, -2, 5, 0, 0);
-      break;
-
-    case EXPR_MUSIC:
-      drawEye(40, 30, 36, 28, 10, px, py + (int)(sin(now / 260.0) * 2.0), 6, 0, 0);
-      drawEye(88, 30, 36, 28, 10, px, py + (int)(sin(now / 260.0) * 2.0), 6, 0, 0);
-      drawNoteIcon(112, 46);
-      break;
-
-    case EXPR_CODING:
-      drawEye(40, 31, 36, 28, 10, px, py + 2, 6, 0, 0);
-      drawEye(88, 31, 36, 28, 10, px, py + 2, 6, 0, 0);
-      oled.setFont(u8g2_font_6x10_tf);
-      oled.drawStr(98, 54, ">_");
-      break;
-
-    case EXPR_BROWSING:
-      drawEye(40, 32, 36, 28, 10,
-              (int)(sin(now / 700.0) * 6.0), py, 6, 0, 0);
-      drawEye(88, 32, 36, 28, 10,
-              (int)(sin(now / 700.0) * 6.0), py, 6, 0, 0);
-      break;
-
-    case EXPR_GAMING:
-      drawEye(40, 32, 40, 32, 12, px, py, 5, 0, 0);
-      drawEye(88, 32, 40, 32, 12, px, py, 5, 0, 0);
+    // ── EXCITED: huge eyes, triple sparkle, jumping bounce ─────────────────
+    case EXPR_EXCITED: {
+      int ey = 31 + breatheY + (int)(abs(sin(now / 150.0f)) * 4.0f);
+      drawEye(40, ey, 38, 30, 11, px, py, 7, 0, 32);
+      drawEye(88, ey, 38, 30, 11, px, py, 7, 0, 32);
+      drawSparkle(16, 20);
+      drawSparkle(112, 20);
+      drawSparkle(64, 10);
       drawSparkle(16, 48);
       drawSparkle(112, 48);
       break;
+    }
 
-    case EXPR_WATCHING:
-      drawEye(40, 32, 42, 34, 13, px / 2, py / 2, 6, 0, 0);
-      drawEye(88, 32, 42, 34, 13, px / 2, py / 2, 6, 0, 0);
-      oled.drawLine(112, 44, 112, 54);
-      oled.drawLine(112, 44, 120, 49);
-      oled.drawLine(112, 54, 120, 49);
+    // ── SURPRISED: dilated pupils, raised brows, mouth O ───────────────────
+    case EXPR_SURPRISED: {
+      int ey = 32 + breatheY;
+      drawEye(40, ey, 44, 36, 14, px / 2, py / 2, 4, 0, 0);
+      drawEye(88, ey, 44, 36, 14, px / 2, py / 2, 4, 0, 0);
+      drawBrows(40, ey, false, true);
+      drawBrows(88, ey, false, true);
+      oled.setDrawColor(1);
+      oled.drawEllipse(64, 56, 5, 4, U8G2_DRAW_ALL);
       break;
+    }
 
-    case EXPR_TYPING:
-      drawEye(40, 31, 36, 28, 10, px, py + 3, 6, 0, 0);
-      drawEye(88, 31, 36, 28, 10, px, py + 3, 6, 0, 0);
+    // ── ANGRY: lowered brows, narrowed eyes, inner glow ────────────────────
+    case EXPR_ANGRY: {
+      int ey = 33 + breatheY;
+      drawEye(40, ey, 36, 24, 9, px, py, 5, 0, 0);
+      drawEye(88, ey, 36, 24, 9, px, py, 5, 0, 0);
+      drawBrows(40, ey, true, false);
+      drawBrows(88, ey, true, false);
+      // Frown
+      oled.setDrawColor(1);
+      for (int i = -7; i <= 7; i++) {
+        int my = 53 + (int)(0.07f * i * i);
+        oled.drawPixel(64 + i, my);
+        oled.drawPixel(64 + i, my + 1);
+      }
+      break;
+    }
+
+    // ── SAD: drooping lids, downward brows, teardrop ────────────────────────
+    case EXPR_SAD: {
+      int ey = 34 + breatheY;
+      drawEye(40, ey, 36, 26, 10, px, py + 2, 6, 20, 0);
+      drawEye(88, ey, 36, 26, 10, px, py + 2, 6, 20, 0);
+      drawBrows(40, ey, false, false);
+      drawBrows(88, ey, false, false);
+      // Animated teardrop under left eye
+      int tdY = 44 + (int)((now / 500) % 10);
+      oled.setDrawColor(1);
+      oled.drawDisc(35, tdY, 2);
+      oled.drawVLine(35, tdY + 2, 3);
+      break;
+    }
+
+    // ── SLEEPY: heavy lid closure, slow pupil droop ─────────────────────────
+    case EXPR_SLEEPY: {
+      int ey = 34 + breatheY;
+      int lidClose = 44 + (int)(sin(now / 1200.0f) * 10.0f);  // lid flutters
+      drawEye(40, ey, 36, 26, 10, px, py + 3, 6, lidClose, 0);
+      drawEye(88, ey, 36, 26, 10, px, py + 3, 6, lidClose, 0);
       oled.setFont(u8g2_font_6x10_tf);
-      oled.drawStr(50, 54, "...");
+      oled.setDrawColor(1);
+      oled.drawStr(100, 32, "z");
       break;
+    }
 
-    case EXPR_AUTONOMOUS:
-      drawEye(40, 32, 36, 28, 10, px, py, 7, 0, 0);
-      drawEye(88, 32, 36, 28, 10, px, py, 7, 0, 0);
-      break;
-
-    case EXPR_DEEP_SLEEP:
+    // ── SLEEPING: flat eyes, drifting Zs ───────────────────────────────────
+    case EXPR_SLEEPING: {
+      drawClosedEye(40, 32, 34);
+      drawClosedEye(88, 32, 34);
+      // Cascading Z sizes, slow drift
+      int zOff = (int)(now / 600) % 12;
       oled.setFont(u8g2_font_10x20_tf);
-      oled.drawStr(38, 30, "Z");
-      oled.drawStr(58, 42, "z");
-      oled.drawStr(72, 52, "z");
+      oled.setDrawColor(1);
+      oled.drawStr(100, 20 + zOff, "Z");
+      oled.setFont(u8g2_font_6x10_tf);
+      oled.drawStr(112, 32 + zOff, "z");
+      oled.drawStr(118, 42 + zOff, "z");
       break;
+    }
 
-    case EXPR_RELAXED:
-    default:
-      drawEye(40, 32, 36, 28, 10, px, py, 7, 0, 0);
-      drawEye(88, 32, 36, 28, 10, px, py, 7, 0, 0);
+    // ── THINKING: eyes up-left, orbiting thought dot ────────────────────────
+    case EXPR_THINKING: {
+      int ey = 32 + breatheY;
+      drawEye(40, ey, 36, 28, 10, -5, -4, 6, 0, 0);
+      drawEye(88, ey + 1, 36, 28, 10, -3, -6, 6, 30, 0);
+      // Orbiting dot around top-right of head
+      float ang = now / 600.0f;
+      int ox = 110 + (int)(cos(ang) * 7);
+      int oy = 18 + (int)(sin(ang) * 7);
+      oled.setDrawColor(1);
+      oled.drawDisc(ox, oy, 2);
+      oled.setFont(u8g2_font_6x10_tf);
+      oled.drawStr(46, 58, ". . .");
       break;
+    }
+
+    // ── CURIOUS: asymmetric pupils, one raised brow ─────────────────────────
+    case EXPR_CURIOUS: {
+      int ey = 32 + breatheY;
+      drawEye(40, ey, 36, 28, 10, px + 6, py - 2, 6, 0, 0);
+      drawEye(88, ey, 36, 28, 10, px + 4, py + 1, 7, 0, 0);
+      drawBrows(88, ey, false, true);
+      // Tilted question mark
+      oled.setFont(u8g2_font_6x10_tf);
+      oled.setDrawColor(1);
+      oled.drawStr(118, 36, "?");
+      break;
+    }
+
+    // ── CONFUSED: mismatched eyes, spinning ? ───────────────────────────────
+    case EXPR_CONFUSED: {
+      int ey = 33 + breatheY;
+      drawEye(40, ey, 36, 28, 10, -6, 2, 6, 32, 0);
+      drawEye(88, ey - 1, 42, 30, 13, 6, -3, 5, 0, 0);
+      // Rotating '?' orbiting centre top
+      float angQ = now / 800.0f;
+      int qx = 64 + (int)(cos(angQ) * 12);
+      int qy = 12 + (int)(sin(angQ) * 5);
+      oled.setFont(u8g2_font_5x7_tf);
+      oled.setDrawColor(1);
+      oled.drawStr(qx, qy, "?");
+      break;
+    }
+
+    // ── MUSIC: beat-synced bounce, dancing notes ────────────────────────────
+    case EXPR_MUSIC: {
+      float beat = abs(sin(now / 240.0f));
+      int ey = 30 + breatheY + (int)(beat * 4.0f);
+      int eyeW = 34 + (int)(beat * 4.0f);
+      drawEye(40, ey, eyeW, 28, 10, px, (int)(sin(now / 240.0f) * 3.0f), 7, 0, 0);
+      drawEye(88, ey, eyeW, 28, 10, px, (int)(sin(now / 240.0f) * 3.0f), 7, 0, 0);
+      drawNoteIcon(108, 48);
+      // Second note offset
+      oled.setDrawColor(1);
+      oled.drawDisc(118, 54, 3);
+      oled.drawVLine(121, 42, 12);
+      // EQ-style bottom bars (3 bars, beat-driven)
+      for (int b = 0; b < 3; b++) {
+        float ph = now / 180.0f + b * 1.1f;
+        int bh = 2 + (int)(abs(sin(ph)) * 5.0f);
+        oled.drawRBox(14 + b * 5, 58 - bh, 4, bh, 1);
+      }
+      break;
+    }
+
+    // ── CODING: focused lean, blinking cursor ─────────────────────────────
+    case EXPR_CODING: {
+      int ey = 31 + breatheY;
+      drawEye(40, ey, 36, 28, 10, px - 1, py + 2, 6, 0, 0);
+      drawEye(88, ey, 36, 28, 10, px + 1, py + 2, 6, 0, 0);
+      oled.setFont(u8g2_font_6x10_tf);
+      oled.setDrawColor(1);
+      oled.drawStr(94, 56, ">_");
+      // Blinking block cursor
+      if ((now / 500) % 2 == 0) {
+        oled.drawBox(106, 48, 5, 7);
+      }
+      break;
+    }
+
+    // ── BROWSING: eyes scan left-right, loading dots ───────────────────────
+    case EXPR_BROWSING: {
+      int ey = 32 + breatheY;
+      float scan = sin(now / 650.0f);
+      int scanX = (int)(scan * 7.0f);
+      drawEye(40, ey, 36, 28, 10, scanX, py, 6, 0, 0);
+      drawEye(88, ey, 36, 28, 10, scanX, py, 6, 0, 0);
+      // Spinning loader arc at bottom
+      float ang = now / 300.0f;
+      int lx = 64 + (int)(cos(ang) * 7);
+      int ly = 57 + (int)(sin(ang) * 3);
+      oled.setDrawColor(1);
+      oled.drawDisc(lx, ly, 2);
+      break;
+    }
+
+    // ── GAMING: dilated, tense, corner HUD sparks ────────────────────────
+    case EXPR_GAMING: {
+      int ey = 32 + breatheY;
+      // Intensity pulse on hit events (fast sine)
+      int gPulse = (int)(abs(sin(now / 120.0f)) * 2.0f);
+      drawEye(40, ey, 40 + gPulse, 32 + gPulse, 12, px, py, 5, 0, 0);
+      drawEye(88, ey, 40 + gPulse, 32 + gPulse, 12, px, py, 5, 0, 0);
+      drawSparkle(14, 50);
+      drawSparkle(114, 50);
+      // Crosshair dot at top
+      oled.setDrawColor(1);
+      oled.drawDisc(64, 8, 2);
+      oled.drawHLine(60, 8, 3);
+      oled.drawHLine(66, 8, 3);
+      oled.drawVLine(64, 4, 3);
+      oled.drawVLine(64, 10, 3);
+      break;
+    }
+
+    // ── WATCHING: wide cinematic eyes, moving dot tracking ────────────────
+    case EXPR_WATCHING: {
+      int ey = 32 + breatheY;
+      // Eyes track a slow moving point (simulates following screen)
+      int tpx = (int)(sin(now / 2000.0f) * 8.0f);
+      drawEye(40, ey, 44, 34, 13, tpx, 0, 6, 0, 0);
+      drawEye(88, ey, 44, 34, 13, tpx, 0, 6, 0, 0);
+      // Play triangle icon bottom-right
+      oled.setDrawColor(1);
+      oled.drawLine(110, 46, 110, 56);
+      oled.drawLine(110, 46, 120, 51);
+      oled.drawLine(110, 56, 120, 51);
+      break;
+    }
+
+    // ── TYPING: downcast eyes, pulsing dots ────────────────────────────────
+    case EXPR_TYPING: {
+      int ey = 31 + breatheY;
+      drawEye(40, ey, 36, 26, 9, px, py + 3, 6, 0, 0);
+      drawEye(88, ey, 36, 26, 9, px, py + 3, 6, 0, 0);
+      // Animated typing ellipsis
+      int dotPhase = (int)(now / 350) % 4;
+      oled.setFont(u8g2_font_6x10_tf);
+      oled.setDrawColor(1);
+      oled.drawStr(46, 58, dotPhase > 0 ? (dotPhase > 1 ? (dotPhase > 2 ? "..." : "..") : ".") : " ");
+      break;
+    }
+
+    // ── AUTONOMOUS: pupils drift in figure-8 Lissajous ────────────────────
+    case EXPR_AUTONOMOUS: {
+      int ey = 32 + breatheY;
+      int apx = (int)(sin(now / 1300.0f) * 6.0f);
+      int apy = (int)(sin(now / 650.0f) * 3.0f);
+      drawEye(40, ey, 36, 28, 10, apx, apy, 7, 0, 0);
+      drawEye(88, ey, 36, 28, 10, apx, apy, 7, 0, 0);
+      // Subtle AI indicator dot top-right
+      oled.setDrawColor(1);
+      if ((now / 800) % 2 == 0) oled.drawDisc(122, 6, 2);
+      break;
+    }
+
+    // ── TALKING: waveform mouth, animated pupils ────────────────────────────
+    case EXPR_TALKING: {
+      // Pupils shift rhythmically as if following speech
+      float sp = now / 350.0f;
+      int tpx = (int)(sin(sp) * 3.0f);
+      int tpy = (int)(cos(sp * 0.7f) * 2.0f) + breatheY;
+      drawEye(40, 32 + tpy, 36, 28, 10, tpx, 0, 7, 0, 0);
+      drawEye(88, 32 + tpy, 36, 28, 10, tpx, 0, 7, 0, 0);
+      drawWaveformMouth(now);
+      // Small mic icon top-left
+      oled.setDrawColor(1);
+      oled.drawRBox(4, 6, 6, 10, 2);
+      oled.drawLine(2, 16, 10, 16);
+      oled.drawVLine(6, 16, 3);
+      break;
+    }
+
+    // ── ALARMED: wide shocked eyes, pulsing alert frame ────────────────────
+    case EXPR_ALARMED: {
+      // Eyes dilate on the pulse beat
+      bool flashOn = ((now / 250) % 2) == 0;
+      int eyeR = flashOn ? 15 : 12;
+      int ey = 32 + breatheY + (flashOn ? -1 : 0);
+      drawEye(40, ey, 44, 36, eyeR, px / 3, py / 3, 3, 0, 0);
+      drawEye(88, ey, 44, 36, eyeR, px / 3, py / 3, 3, 0, 0);
+      drawBrows(40, ey, false, true);
+      drawBrows(88, ey, false, true);
+      drawAlertFrame(now);
+      break;
+    }
+
+    // ── DEEP_SLEEP: dim cascading Zs ───────────────────────────────────────
+    case EXPR_DEEP_SLEEP: {
+      int zOff = (int)(now / 900) % 14;
+      oled.setFont(u8g2_font_10x20_tf);
+      oled.setDrawColor(1);
+      oled.drawStr(36, 28 - zOff / 3, "Z");
+      oled.setFont(u8g2_font_6x10_tf);
+      oled.drawStr(56, 40 - zOff / 4, "z");
+      oled.drawStr(70, 50 - zOff / 5, "z");
+      break;
+    }
+
+    // ── RELAXED: default calm, fully wired to breathing ────────────────────
+    case EXPR_RELAXED:
+    default: {
+      int ey = 32 + breatheY + musicBounce;
+      drawEye(40, ey, 36, 28, 10, px, py, 7, 0, 0);
+      drawEye(88, ey, 36, 28, 10, px, py, 7, 0, 0);
+      break;
+    }
   }
 
   drawStatusLabel();
@@ -2923,6 +3114,7 @@ void drawTft(unsigned long now) {
 // Arduino entry points
 // ----------------------------------------------------------------------------
 void setup() {
+  Serial.setRxBufferSize(16384);
   Serial.begin(112000);
   delay(300);
   Serial.println();
