@@ -702,8 +702,10 @@ void initTft() {
 
   SPI.begin(PIN_TFT_SCLK, -1, PIN_TFT_MOSI, PIN_TFT_CS);
   tft.initR(INITR_BLACKTAB);
-  tft.setRotation(2);
-  // Library default for BLACKTAB rotation 2: RGB (0x00). No override.
+  tft.setRotation(0);
+  // Panel is BGR type: set BGR bit (0x08) keeping rotation-0 transform (0xC0).
+  uint8_t madctl = 0xC8;
+  tft.sendCommand(ST77XX_MADCTL, &madctl, 1);
   tft.fillScreen(theme.bg);
   tft.setTextWrap(false);
   tft.setTextSize(1);
