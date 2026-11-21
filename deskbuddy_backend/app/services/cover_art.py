@@ -28,7 +28,7 @@ def rgb888_to_rgb565_be(r: int, g: int, b: int) -> bytes:
     g6 = (g >> 2) & 0x3F
     b5 = (b >> 3) & 0x1F
     val = (r5 << 11) | (g6 << 5) | b5
-    return val.to_bytes(2, byteorder="big")
+    return val.to_bytes(2, byteorder="little")
 
 
 def image_to_rgb565(img: Image.Image) -> bytes:
