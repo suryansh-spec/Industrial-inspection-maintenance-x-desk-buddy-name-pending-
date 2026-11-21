@@ -219,8 +219,16 @@ class MusicController:
             else:
                 smtc_status = self._status
             
+            _raw_smtc_playing = smtc_status.playing
             # Intended override takes priority.
-            _is_playing = self._intended_playing  # may be None
+            if self._intended_playing is not None:
+                _is_playing = self._intended_playing
+            else:
+                _session_alive = bool(smtc_status.title) and smtc_status.duration_ms > 0
+                _not_ended = smtc_status.progress_ms < smtc_status.duration_ms
+                _is_playing = (not self._explicitly_paused) and (
+                    _raw_smtc_playing or (_session_alive and _not_ended)
+                )
             # Interpolate progress for backgrounded tabs (SMTC position freezes).
             if _is_playing is None:
                 _session_alive = bool(smtc_status.title) and smtc_status.duration_ms > 0
@@ -228,7 +236,7 @@ class MusicController:
                 _is_playing = (not self._explicitly_paused) and (
                     smtc_status.playing or (_session_alive and _not_ended)
                 )
-            smtc_status.playing = _is_playing if _is_playing is not None else smtc_status.playing
+            smtc_status.playing = _is_playing
             # Interpolate progress for backgrounded tabs (SMTC position freezes).
             if smtc_status.duration_ms > 0 and smtc_status.playing:
                 elapsed_ms = int((time.monotonic() - self._last_smtc_read_time) * 1000)
@@ -239,10 +247,10 @@ class MusicController:
                     else:
                         smtc_status.progress_ms = smtc_status.duration_ms
             
-            # Clear override only when SMTC agrees
-            if self._intended_playing and smtc_status.playing:
+            # Clear override only when SMTC agrees (use raw, not overridden)
+            if self._intended_playing is True and _raw_smtc_playing:
                 self._intended_playing = None
-            elif not self._intended_playing and not smtc_status.playing:
+            elif self._intended_playing is False and not _raw_smtc_playing:
                 self._intended_playing = None
             
             smtc_status.playing = self._intended_playing if self._intended_playing is not None else smtc_status.playing
