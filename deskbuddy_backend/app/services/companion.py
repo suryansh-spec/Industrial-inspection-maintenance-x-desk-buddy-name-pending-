@@ -168,6 +168,22 @@ class CompanionService:
         except Exception as exc:
             logger.debug("Failed to dispatch cover art: %s", exc)
 
+    def clear_cover_art_cache(self) -> None:
+        """Clear the cover art cache to force re-sync on next track change or state push."""
+        self._cover_art_key = None
+
+    async def force_cover_art_sync(self) -> None:
+        """Force immediate cover art re-sync for the currently playing track."""
+        self._cover_art_key = None
+        summary = self.get_summary()
+        music = summary.get("music", {})
+        title = music.get("title")
+        artist = music.get("artist")
+        album_art_url = music.get("album_art_url")
+        # Sync if we have a title (artist may be empty but album_art_url might exist)
+        if title:
+            await self._sync_cover_art(title, artist or "", album_art_url)
+
     def _resolve_cover_cached(self, title: str, artist: str) -> str:
         try:
             from app.services.cover_art import _URL_CACHE, CoverArtService

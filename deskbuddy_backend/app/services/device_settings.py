@@ -297,5 +297,11 @@ async def push_all(manager) -> None:
         await manager.send_command("set_buttons", {"map": store.flat_button_map()})
         await push_display(manager)
         await push_wallpaper(manager)
+        # Force cover art re-sync on reconnect (cover art is lost on device reboot)
+        try:
+            from app.services.companion import companion_service
+            await companion_service.force_cover_art_sync()
+        except Exception:
+            logger.debug("Could not force cover art sync", exc_info=True)
     except Exception:  # pragma: no cover - hardware dependent
         logger.warning("Could not push device settings", exc_info=True)
