@@ -703,7 +703,7 @@ void initTft() {
   tft.setRotation(2);
   // Use RGB color order. ST7735 BLACKTAB defaults to BGR (0xC8) which
   // swaps red<->blue on this panel. sendCommand is the library's proven path.
-  uint8_t madctl = 0xC0;  // MX|MY, RGB
+  uint8_t madctl = 0x08;  // BGR, rotation 2
   tft.sendCommand(ST77XX_MADCTL, &madctl, 1);
   tft.fillScreen(theme.bg);
   tft.setTextWrap(false);
