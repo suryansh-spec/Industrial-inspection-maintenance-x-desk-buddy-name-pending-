@@ -308,11 +308,14 @@ class MusicController:
                 import time as _t
                 now = _t.monotonic()
                 if progress_ms > 0:
-                    # Always refresh the read time so interpolation elapsed
-                    # stays small even when the SMTC position is frozen.
+                    # Only update the anchor when the position actually changes.
+                    # When frozen (backgrounded tab), keep the anchor so elapsed
+                    # grows and interpolation can advance the progress.
                     if progress_ms != self._last_smtc_position_ms:
                         self._last_smtc_position_ms = progress_ms
-                    self._last_smtc_read_time = now
+                        self._last_smtc_read_time = now
+                    elif self._last_smtc_read_time == 0:
+                        self._last_smtc_read_time = now
                 
                 return {
                     "title": info.title,
