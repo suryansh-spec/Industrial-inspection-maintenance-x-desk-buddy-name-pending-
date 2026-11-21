@@ -703,7 +703,7 @@ void initTft() {
   SPI.begin(PIN_TFT_SCLK, -1, PIN_TFT_MOSI, PIN_TFT_CS);
   // Try GREENTAB (BGR color order by default) - may match this panel better.
   tft.initR(INITR_GREENTAB);
-  tft.setRotation(0);
+  tft.setRotation(2);
   tft.fillScreen(theme.bg);
   tft.setTextWrap(false);
   tft.setTextSize(1);
