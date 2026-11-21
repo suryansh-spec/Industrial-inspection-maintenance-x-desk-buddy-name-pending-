@@ -396,6 +396,8 @@ bool tftFullRedraw = true;
 // Music page partial-refresh tracking
 bool lastMusicPlaying = false;
 int lastMusicPercent = -1;
+float dispProgress = -1.0f;
+float lastDispProgress = -1.0f;
 char lastProgressText[24] = "";
 char lastMusicTitle[64] = "";
 bool noticeOverride = false;
@@ -2234,14 +2236,30 @@ void formatTime(int seconds, char* buffer, size_t size) {
 void drawHeader(const char* title) {
   int width = tft.width();
   tft.fillScreen(theme.bg);
-  tft.fillRect(0, 0, width, 15, theme.headerBg);
+  // Subtle header gradient (top band)
+  for (int y = 0; y < 15; y++) {
+    uint8_t mix = (uint8_t)(y * 6);
+    uint16_t c = tft.color565(
+      ((theme.headerBg >> 11) & 0x1F) * 8 + mix / 4,
+      ((theme.headerBg >> 5) & 0x3F) * 4 + mix / 4,
+      (theme.headerBg & 0x1F) * 8 + mix / 4);
+    tft.drawFastHLine(0, y, width, c);
+  }
   tft.setTextSize(1);
   tft.setTextColor(theme.headerText, theme.headerBg);
   tft.setCursor(4, 4);
   tft.print(title);
 
+  // Pulsing status dot
+  float pulse = 0.5f + 0.5f * sin(millis() / 400.0f);
+  int dotR = 2 + (int)(pulse * 2.0f);
   uint16_t linkColor = state.backendOnline ? theme.success : theme.danger;
-  tft.fillCircle(width - 8, 7, 3, linkColor);
+  tft.fillCircle(width - 8, 7, dotR + 2, theme.bg);
+  tft.fillCircle(width - 8, 7, dotR, linkColor);
+  // Glow ring
+  if (state.backendOnline) {
+    tft.drawCircle(width - 8, 7, dotR + 3, theme.success);
+  }
 }
 
 void drawBar(int x, int y, int w, int h, float percent, uint16_t color) {
@@ -2482,15 +2500,21 @@ void drawMusicPage() {
     tftFullRedraw = false;
   }
 
-  // --- Dynamic: progress bar ---
+  // --- Dynamic: progress bar (smoothly animated) ---
   int percent = 0;
   if (state.musicDuration > 0) {
     percent = (state.musicProgress * 100) / state.musicDuration;
   }
-  if (percent != lastMusicPercent || tftFullRedraw) {
-    drawBar(4, 68, 120, 8, (float)percent, theme.success);
-    lastMusicPercent = percent;
+  if (dispProgress < 0) dispProgress = percent;
+  // Lerp toward target
+  dispProgress += (percent - dispProgress) * 0.25f;
+  if (fabs(dispProgress - percent) < 0.5f) dispProgress = percent;
+  // Redraw if changed or full redraw
+  if (fabs(dispProgress - lastDispProgress) > 0.4f || tftFullRedraw) {
+    drawBar(4, 68, 120, 8, dispProgress, theme.success);
+    lastDispProgress = dispProgress;
   }
+  lastMusicPercent = percent;
 
   // --- Dynamic: progress text ---
   char progressText[24];
