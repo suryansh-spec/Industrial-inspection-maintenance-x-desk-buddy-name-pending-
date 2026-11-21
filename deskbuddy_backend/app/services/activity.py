@@ -593,6 +593,20 @@ class ActivityService:
             "poll_interval": self._poll_interval,
         }
 
+    def set_thresholds(self, values: Dict[str, Any]) -> Dict[str, float]:
+        """Update inactivity thresholds (used by the web panel)."""
+        for key, attr in (
+            ("sleepy_seconds", "_sleepy_seconds"),
+            ("sleep_seconds", "_sleep_seconds"),
+            ("deep_sleep_seconds", "_deep_sleep_seconds"),
+        ):
+            if key in values:
+                try:
+                    setattr(self, attr, max(1, int(values[key])))
+                except (TypeError, ValueError):
+                    continue
+        return self.thresholds
+
     async def start(self) -> None:
         if self._running:
             return

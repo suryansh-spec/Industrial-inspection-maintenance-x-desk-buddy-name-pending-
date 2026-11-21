@@ -445,22 +445,29 @@ function SectionHeader({ title, sub }) {
 }
 
 function Expressions() {
-  const [mappings, setMappings] = useState([]);
+  const [mappings, setMappings] = useState({});
+  const [activities, setActivities] = useState([...new Set(ACTIVITIES)]);
+  const [expressions, setExpressions] = useState(EXPRESSIONS);
+  const [thresholds, setThresholds] = useState({ sleepy_seconds: 30, sleep_seconds: 120, deep_sleep_seconds: 300 });
   const [loading, setLoading] = useState(true);
+
   useEffect(() => {
-    api('/config/expressions').then(d => { setMappings(d.mappings || []); setLoading(false); }).catch(() => setLoading(false));
+    api('/config/expressions').then(d => {
+      const map = {};
+      (d.mappings || []).forEach(m => { map[m.activity] = m.expression; });
+      setMappings(map);
+      if (Array.isArray(d.activities) && d.activities.length) setActivities([...new Set(d.activities)]);
+      if (Array.isArray(d.expressions) && d.expressions.length) setExpressions([...new Set([...d.expressions, ...EXPRESSIONS])]);
+    }).catch(() => {}).finally(() => setLoading(false));
+    api('/companion/thresholds').then(t => setThresholds(prev => ({...prev, ...t}))).catch(() => {});
   }, []);
+
   const saveMappings = async () => {
     try {
-      const rows = document.querySelectorAll('tbody tr');
-      const mappings = [];
-      rows.forEach(row => {
-        const act = row.querySelector('td:first-child').textContent;
-        const sel = row.querySelector('select');
-        if (act && sel) mappings.push({activity: act, expression: sel.value});
-      });
-      await api('/config/expressions', {method:'PUT', body: JSON.stringify(mappings)});
-      notify('Expression mappings saved!');
+      const payload = activities.map(a => ({ activity: a, expression: mappings[a] || a }));
+      await api('/config/expressions', {method:'PUT', body: JSON.stringify(payload)});
+      await api('/companion/thresholds', {method:'PUT', body: JSON.stringify(thresholds)});
+      notify('Expression mappings saved & applied');
     } catch(e) { notify('Error: ' + e.message, 'error'); }
   };
   return (
@@ -470,19 +477,18 @@ function Expressions() {
         <table className="w-full text-sm">
           <thead><tr className="text-slate-400"><th className="text-left py-2">Activity</th><th className="text-left py-2">Expression</th><th className="text-left py-2">Actions</th></tr></thead>
           <tbody>
-            {ACTIVITIES.map((act, idx) => (
-              <tr key={act + idx} className="border-t border-slate-700/60">
+            {activities.map(act => (
+              <tr key={act} className="border-t border-slate-700/60">
                 <td className="py-2 font-mono">{act}</td>
                 <td className="py-2">
-                  <select className="px-2 py-1" defaultValue="relaxed">
-                    {EXPRESSIONS.map(e => <option key={e} value={e}>{e}</option>)}
+                  <select className="px-2 py-1" value={mappings[act] || act}
+                    onChange={e => setMappings(m => ({...m, [act]: e.target.value}))}>
+                    {expressions.map(e => <option key={e} value={e}>{e}</option>)}
                   </select>
                 </td>
                 <td className="py-2">
-                  <button className="btn btn-secondary text-xs" onClick={(e) => {
-                    const row = e.target.closest('tr');
-                    const sel = row.querySelector('select');
-                    const expr = sel ? sel.value : 'happy';
+                  <button className="btn btn-secondary text-xs" onClick={() => {
+                    const expr = mappings[act] || 'happy';
                     api('/companion/emotion', {method:'POST', body: JSON.stringify({expression: expr, duration_seconds: 5})}).then(() => notify('Expression "' + expr + '" sent for 5s')).catch(err => notify('Error: ' + err.message, 'error'));
                   }}>Test</button>
                 </td>
@@ -495,9 +501,9 @@ function Expressions() {
       <div className="card">
         <h3 className="font-semibold mb-3">Sleep Thresholds (seconds)</h3>
         <div className="grid grid-cols-3 gap-3 text-sm">
-          <div><label className="text-slate-400">Sleepy</label><input type="number" className="px-2 py-1 w-full" defaultValue={30} /></div>
-          <div><label className="text-slate-400">Sleeping</label><input type="number" className="px-2 py-1 w-full" defaultValue={120} /></div>
-          <div><label className="text-slate-400">Deep Sleep</label><input type="number" className="px-2 py-1 w-full" defaultValue={300} /></div>
+          <div><label className="text-slate-400">Sleepy</label><input type="number" min="1" className="px-2 py-1 w-full" value={thresholds.sleepy_seconds} onChange={e => setThresholds(t => ({...t, sleepy_seconds: parseInt(e.target.value || '0')}))} /></div>
+          <div><label className="text-slate-400">Sleeping</label><input type="number" min="1" className="px-2 py-1 w-full" value={thresholds.sleep_seconds} onChange={e => setThresholds(t => ({...t, sleep_seconds: parseInt(e.target.value || '0')}))} /></div>
+          <div><label className="text-slate-400">Deep Sleep</label><input type="number" min="1" className="px-2 py-1 w-full" value={thresholds.deep_sleep_seconds} onChange={e => setThresholds(t => ({...t, deep_sleep_seconds: parseInt(e.target.value || '0')}))} /></div>
         </div>
       </div>
     </div>
@@ -510,25 +516,54 @@ const PAGES = ["home", "music", "lyrics", "pc", "env", "notifications", "pomodor
 const ACTIONS = ["next_page", "prev_page", "play_pause", "volume_up", "volume_down", "toggle_mode", "voice_request", "none"];
 
 function ButtonMappings() {
-  // NOTE: no backend endpoint for button mappings exists in this file yet.
-  const saveMappings = () => notify('Button mapping save is not wired to a backend endpoint yet', 'error');
+  const [meta, setMeta] = useState({ buttons: BUTTONS, pages: PAGES, actions: ACTIONS });
+  const [map, setMap] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api('/config/buttons').then(d => {
+      setMeta({ buttons: d.buttons || BUTTONS, pages: d.pages || PAGES, actions: d.actions || ACTIONS });
+      setMap(Array.isArray(d.map) ? d.map : []);
+    }).catch(() => {}).finally(() => setLoading(false));
+  }, []);
+
+  const setCell = (b, p, value) => setMap(prev => {
+    const next = prev.map(row => row.slice());
+    while (next.length <= b) next.push([]);
+    const row = next[b];
+    while (row.length <= p) row.push(0);
+    row[p] = parseInt(value, 10) || 0;
+    return next;
+  });
+
+  const saveMappings = async () => {
+    try {
+      await api('/config/buttons', { method: 'PUT', body: JSON.stringify({ map }) });
+      notify('Button map saved & pushed to device');
+    } catch (e) { notify('Error: ' + e.message, 'error'); }
+  };
+
+  const resetDefaults = () => setMap([5, 6, 1, 0, 8].map(v => Array(meta.pages.length).fill(v)));
+
   return (
     <div className="space-y-4 stagger">
-      <SectionHeader title="Button Mappings" sub="Configure what each button does on each page." />
+      <SectionHeader title="Button Mappings" sub="Edit what each button does on each page. Saving pushes the map to the ESP32." />
       <div className="card overflow-x-auto">
+        {loading && <p className="text-slate-500 text-sm">Loading map...</p>}
         <table className="w-full text-sm">
           <thead><tr className="text-slate-400">
             <th className="text-left py-2">Button</th>
-            {PAGES.map(p => <th key={p} className="text-left py-2 px-2">{p}</th>)}
+            {meta.pages.map(p => <th key={p} className="text-left py-2 px-2">{p}</th>)}
           </tr></thead>
           <tbody>
-            {BUTTONS.map(btn => (
+            {meta.buttons.map((btn, b) => (
               <tr key={btn} className="border-t border-slate-700/60">
                 <td className="py-2 font-mono font-bold">{btn}</td>
-                {PAGES.map(p => (
+                {meta.pages.map((p, pi) => (
                   <td key={p} className="py-2 px-2">
-                    <select className="px-1 py-1 text-xs">
-                      {ACTIONS.map(a => <option key={a} value={a}>{a}</option>)}
+                    <select className="px-1 py-1 text-xs" value={map[b]?.[pi] ?? 0}
+                      onChange={e => setCell(b, pi, e.target.value)}>
+                      {meta.actions.map((a, ai) => <option key={a} value={ai}>{a}</option>)}
                     </select>
                   </td>
                 ))}
@@ -537,7 +572,10 @@ function ButtonMappings() {
           </tbody>
         </table>
       </div>
-      <button className="btn btn-primary" onClick={saveMappings}>Save Mappings</button>
+      <div className="flex flex-wrap gap-2">
+        <button className="btn btn-primary" onClick={saveMappings}>Save & Push to Device</button>
+        <button className="btn btn-secondary" onClick={resetDefaults}>Reset defaults</button>
+      </div>
       <div className="card">
         <h3 className="font-semibold mb-3">Gesture Config</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
@@ -554,30 +592,102 @@ function ButtonMappings() {
 // ─── Notifications ────────────────────────────────────────
 function Notifications() {
   const [notifs, setNotifs] = useState([]);
-  useEffect(() => {
-    api('/desktop/notifications?limit=50').then(d => setNotifs(d.notifications || [])).catch(() => {});
-  }, []);
-  const addRule = () => notify('Rule added (placeholder - backend endpoint coming soon)');
+  const [rules, setRules] = useState([]);
+  const [metrics, setMetrics] = useState([]);
+  const [draft, setDraft] = useState({ metric: 'cpu', op: '>', threshold: 80, name: 'High CPU', title: 'High CPU', message: '{metric} is {value}', priority: 'high', cooldown: 300, enabled: true });
+
+  const loadHistory = () => api('/desktop/notifications?limit=50').then(d => setNotifs(d.notifications || [])).catch(() => {});
+  const loadRules = () => api('/config/notification-rules')
+    .then(d => { setRules(d.rules || []); setMetrics(d.metrics || []); })
+    .catch(() => {});
+
+  useEffect(() => { loadHistory(); loadRules(); }, []);
+
+  const updateRule = async (id, patch) => {
+    try {
+      const d = await api('/config/notification-rules/' + id, { method: 'PUT', body: JSON.stringify(patch) });
+      setRules(d.rules || []);
+    } catch (e) { notify('Error: ' + e.message, 'error'); }
+  };
+  const addRule = async () => {
+    try {
+      const d = await api('/config/notification-rules', { method: 'POST', body: JSON.stringify(draft) });
+      setRules(d.rules || []);
+      notify('Rule created');
+    } catch (e) { notify('Error: ' + e.message, 'error'); }
+  };
+  const deleteRule = async (id) => {
+    try {
+      const d = await api('/config/notification-rules/' + id, { method: 'DELETE' });
+      setRules(d.rules || []);
+      notify('Rule deleted');
+    } catch (e) { notify('Error: ' + e.message, 'error'); }
+  };
+  const testRule = async (id) => {
+    try {
+      await api('/config/notification-rules/' + id + '/test', { method: 'POST' });
+      notify('Test notification sent');
+      setTimeout(loadHistory, 400);
+    } catch (e) { notify('Error: ' + e.message, 'error'); }
+  };
+
+  const ops = ['>', '>=', '<', '<=', '==', '!='];
+  const priorities = ['low', 'normal', 'high', 'urgent'];
+
   return (
     <div className="space-y-4 stagger">
-      <SectionHeader title="Notifications" />
+      <SectionHeader title="Notifications" sub="Rules are saved, evaluated every 5 s and shown on the device." />
       <div className="card">
         <h3 className="font-semibold mb-1">Notification Rules</h3>
         <p className="text-slate-400 text-sm mb-3">IF condition THEN send notification</p>
-        <div className="space-y-3">
-          <div className="flex flex-wrap gap-2 items-center text-sm">
-            <span className="text-cyan-400 font-bold">IF</span> CPU &gt; <input className="px-2 py-1 w-16" defaultValue={80} />%
-            <span className="text-cyan-400 font-bold">THEN</span> notify "High CPU" priority
-            <select className="px-2 py-1"><option>high</option><option>normal</option><option>urgent</option></select>
-            <button className="btn btn-secondary text-xs" onClick={addRule}>Add Rule</button>
-          </div>
-          <div className="flex flex-wrap gap-2 items-center text-sm">
-            <span className="text-cyan-400 font-bold">IF</span> GPU temp &gt; <input className="px-2 py-1 w-16" defaultValue={80} />°C
-            <span className="text-cyan-400 font-bold">THEN</span> notify "GPU Hot" priority
-            <select className="px-2 py-1"><option>high</option><option>normal</option><option>urgent</option></select>
-            <button className="btn btn-secondary text-xs" onClick={addRule}>Add Rule</button>
-          </div>
+        <div className="space-y-2">
+          {rules.length === 0 && <p className="text-slate-500 text-sm">No rules yet — add one below.</p>}
+          {rules.map(r => (
+            <div key={r.id} className="flex flex-wrap gap-2 items-center text-sm border-t border-slate-700/50 pt-2">
+              <label className="flex items-center gap-1 text-xs text-slate-400">
+                <input type="checkbox" checked={!!r.enabled} onChange={e => updateRule(r.id, { enabled: e.target.checked })} /> on
+              </label>
+              <span className="text-cyan-400 font-bold">IF</span>
+              <select className="px-2 py-1 text-xs" value={r.metric} onChange={e => updateRule(r.id, { metric: e.target.value })}>
+                {metrics.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+              </select>
+              <select className="px-1 py-1 text-xs" value={r.op} onChange={e => updateRule(r.id, { op: e.target.value })}>
+                {ops.map(o => <option key={o} value={o}>{o}</option>)}
+              </select>
+              <input type="number" className="px-2 py-1 w-20 text-xs" defaultValue={r.threshold}
+                onBlur={e => updateRule(r.id, { threshold: parseFloat(e.target.value) })} />
+              <span className="text-cyan-400 font-bold">THEN</span>
+              <input className="px-2 py-1 text-xs flex-1 min-w-[8rem]" defaultValue={r.title}
+                onBlur={e => updateRule(r.id, { title: e.target.value })} />
+              <select className="px-2 py-1 text-xs" value={r.priority} onChange={e => updateRule(r.id, { priority: e.target.value })}>
+                {priorities.map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+              <button className="btn btn-secondary text-xs" onClick={() => testRule(r.id)}>Test</button>
+              <button className="btn btn-secondary text-xs" onClick={() => deleteRule(r.id)}>Delete</button>
+            </div>
+          ))}
         </div>
+        <div className="flex flex-wrap gap-2 items-center text-sm border-t border-slate-700/50 mt-3 pt-3">
+          <span className="text-cyan-400 font-bold">IF</span>
+          <select className="px-2 py-1 text-xs" value={draft.metric} onChange={e => setDraft({ ...draft, metric: e.target.value, name: e.target.value })}>
+            {metrics.length
+              ? metrics.map(m => <option key={m.id} value={m.id}>{m.label}</option>)
+              : <option value="cpu">CPU %</option>}
+          </select>
+          <select className="px-1 py-1 text-xs" value={draft.op} onChange={e => setDraft({ ...draft, op: e.target.value })}>
+            {ops.map(o => <option key={o} value={o}>{o}</option>)}
+          </select>
+          <input type="number" className="px-2 py-1 w-20 text-xs" value={draft.threshold}
+            onChange={e => setDraft({ ...draft, threshold: parseFloat(e.target.value || '0') })} />
+          <span className="text-cyan-400 font-bold">THEN</span>
+          <input className="px-2 py-1 text-xs flex-1 min-w-[8rem]" value={draft.title}
+            onChange={e => setDraft({ ...draft, title: e.target.value, name: e.target.value })} />
+          <select className="px-2 py-1 text-xs" value={draft.priority} onChange={e => setDraft({ ...draft, priority: e.target.value })}>
+            {priorities.map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
+          <button className="btn btn-primary text-xs" onClick={addRule}>Add Rule</button>
+        </div>
+        <p className="text-slate-500 text-xs mt-2">Message template supports {'{metric}'}, {'{value}'} and {'{threshold}'}.</p>
       </div>
       <div className="card">
         <h3 className="font-semibold mb-2">History</h3>
@@ -1050,9 +1160,61 @@ function DeviceThemeEditor() {
     {id:'white', name:'White', bg:'#FFFFFF', text:'#000000', accent:'#0000FF', secondary:'#808080', warning:'#FF8800', success:'#008800', danger:'#FF0000', headerBg:'#DDDDDD'},
   ]);
 
+  const [display, setDisplay] = useState({ font_face: 'pixel', wallpaper_opacity: 150, wallpaper: false, fonts: [] });
+  const [wallpaperPreview, setWallpaperPreview] = useState(null);
+  const [uploading, setUploading] = useState(false);
+
   useEffect(() => {
     api('/config/device-theme').then(d => setTheme(d)).catch(() => {});
+    api('/config/display').then(d => setDisplay(d)).catch(() => {});
+    api('/config/wallpaper').then(d => {
+      if (d.present && d.data) setWallpaperPreview('data:image/png;base64,' + d.data);
+    }).catch(() => {});
   }, []);
+
+  const saveDisplay = async (patch) => {
+    setDisplay(prev => ({ ...prev, ...patch }));
+    try {
+      const d = await api('/config/display', { method: 'PUT', body: JSON.stringify(patch) });
+      if (d.display) setDisplay(prev => ({ ...prev, ...d.display, wallpaper: d.wallpaper }));
+      notify('Display setting applied');
+    } catch (e) { notify('Error: ' + e.message, 'error'); }
+  };
+
+  const uploadWallpaper = (file) => {
+    if (!file) return;
+    setUploading(true);
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = async () => {
+      try {
+        // Downscale in the browser (2x the panel) so the upload stays small.
+        const canvas = document.createElement('canvas');
+        canvas.width = 256; canvas.height = 320;
+        const ctx = canvas.getContext('2d');
+        const scale = Math.max(canvas.width / img.width, canvas.height / img.height);
+        const w = img.width * scale, h = img.height * scale;
+        ctx.drawImage(img, (canvas.width - w) / 2, (canvas.height - h) / 2, w, h);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+        await api('/config/wallpaper', { method: 'POST', body: JSON.stringify({ image: dataUrl }) });
+        setWallpaperPreview(dataUrl);
+        setDisplay(prev => ({ ...prev, wallpaper: true }));
+        notify('Wallpaper uploaded & pushed to device');
+      } catch (e) { notify('Error: ' + e.message, 'error'); }
+      finally { URL.revokeObjectURL(url); setUploading(false); }
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); setUploading(false); notify('Could not read that image', 'error'); };
+    img.src = url;
+  };
+
+  const clearWallpaper = async () => {
+    try {
+      await api('/config/wallpaper', { method: 'DELETE' });
+      setWallpaperPreview(null);
+      setDisplay(prev => ({ ...prev, wallpaper: false }));
+      notify('Wallpaper cleared');
+    } catch (e) { notify('Error: ' + e.message, 'error'); }
+  };
 
   const applyPreset = (p) => {
     const newTheme = {...theme, bg_color: p.bg, text_color: p.text, accent_color: p.accent, secondary_color: p.secondary, warning_color: p.warning, success_color: p.success, danger_color: p.danger, header_bg: p.headerBg};
@@ -1114,6 +1276,46 @@ function DeviceThemeEditor() {
           <div><label className="text-slate-400">Big</label><input type="number" min="1" max="4" className="px-2 py-1 w-full" value={theme.big_size} onChange={e => updateField('big_size', parseInt(e.target.value))} /></div>
           <div><label className="text-slate-400">Timer</label><input type="number" min="1" max="4" className="px-2 py-1 w-full" value={theme.timer_size} onChange={e => updateField('timer_size', parseInt(e.target.value))} /></div>
         </div>
+      </div>
+      <div className="card">
+        <h3 className="font-semibold mb-3">Font & Wallpaper</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+          <div>
+            <label className="text-slate-400 block mb-1">Font face</label>
+            <select className="px-2 py-1 w-full" value={display.font_face}
+              onChange={e => saveDisplay({ font_face: e.target.value })}>
+              {(display.fonts && display.fonts.length
+                ? display.fonts
+                : [{ id: 'pixel', label: 'Pixel (Org_01)' }, { id: 'compact', label: 'Compact (TomThumb)' }]
+              ).map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
+            </select>
+            <p className="text-slate-500 text-xs mt-1">Applied immediately to every TFT page.</p>
+          </div>
+          <div>
+            <label className="text-slate-400 block mb-1">Wallpaper dimming: {display.wallpaper_opacity}</label>
+            <input type="range" min="0" max="255" className="w-full" value={display.wallpaper_opacity}
+              onChange={e => setDisplay(prev => ({ ...prev, wallpaper_opacity: parseInt(e.target.value) }))}
+              onMouseUp={e => saveDisplay({ wallpaper_opacity: parseInt(e.target.value) })}
+              onTouchEnd={e => saveDisplay({ wallpaper_opacity: parseInt(e.target.value) })} />
+            <p className="text-slate-500 text-xs mt-1">Higher = darker, so text stays readable.</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-3 mt-4">
+          <label className="btn btn-secondary cursor-pointer text-xs">
+            {uploading ? 'Uploading…' : 'Upload wallpaper'}
+            <input type="file" accept="image/*" className="hidden" disabled={uploading}
+              onChange={e => uploadWallpaper(e.target.files && e.target.files[0])} />
+          </label>
+          {display.wallpaper && <button className="btn btn-secondary text-xs" onClick={clearWallpaper}>Remove wallpaper</button>}
+          {wallpaperPreview && (
+            <div className="flex items-center gap-2">
+              <img src={wallpaperPreview} alt="wallpaper preview" className="rounded-lg border border-slate-600"
+                style={{ width: 64, height: 80, objectFit: 'cover' }} />
+              <span className="text-slate-500 text-xs">128 × 160 on device</span>
+            </div>
+          )}
+        </div>
+        <p className="text-slate-500 text-xs mt-2">Stored on the PC and re-sent automatically whenever the device connects.</p>
       </div>
       <div className="card">
         <h3 className="font-semibold mb-2">Live Preview (TFT)</h3>

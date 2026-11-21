@@ -103,3 +103,17 @@ async def get_thresholds():
     """Return the inactivity thresholds used by the sleep engine."""
 
     return companion_service.activity.thresholds
+
+
+@router.put("/thresholds")
+async def update_thresholds(values: Dict[str, Any]):
+    """Persist and apply the inactivity thresholds edited in the web panel."""
+
+    from app.services.device_settings import store
+
+    current = store.get("sleep_thresholds") or {}
+    for key in ("sleepy_seconds", "sleep_seconds", "deep_sleep_seconds"):
+        if key in (values or {}):
+            current[key] = values[key]
+    store.replace("sleep_thresholds", current)
+    return companion_service.activity.set_thresholds(current)

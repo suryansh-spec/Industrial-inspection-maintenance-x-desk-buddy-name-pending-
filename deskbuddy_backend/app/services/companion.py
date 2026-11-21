@@ -440,6 +440,14 @@ class CompanionService:
                 await music_controller.previous_track()
             elif action == "volume" and level is not None:
                 await music_controller.set_volume(int(level))
+            elif action in ("volume_up", "vol_up", "volume_down", "vol_down"):
+                status = music_controller.get_status()
+                current = getattr(status, "volume", None)
+                if current is None and isinstance(status, dict):
+                    current = status.get("volume")
+                current = int(current if current is not None else 50)
+                step = 5 if action in ("volume_up", "vol_up") else -5
+                await music_controller.set_volume(max(0, min(100, current + step)))
             else:
                 logger.debug("Unknown music action: %s", action)
                 return []
@@ -576,9 +584,19 @@ class CompanionService:
         pomodoro = self._pomodoro_dict()
         now = datetime.now()
 
+        # The web panel can remap activity -> OLED face expression.
+        expression = context.get("expression")
+        try:
+            from app.services.device_settings import store as device_store
+            mapped = device_store.expressions().get(str(context.get("activity")))
+            if mapped:
+                expression = mapped
+        except Exception:  # pragma: no cover - settings are optional
+            pass
+
         return {
             "activity": context.get("activity"),
-            "expression": context.get("expression"),
+            "expression": expression,
             "sleep_stage": context.get("sleep_stage"),
             "app": context.get("app"),
             "window": context.get("window"),

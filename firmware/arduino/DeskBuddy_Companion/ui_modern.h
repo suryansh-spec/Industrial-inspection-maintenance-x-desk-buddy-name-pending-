@@ -21,6 +21,7 @@
 #pragma once
 
 #include <Fonts/Org_01.h>
+#include <Fonts/TomThumb.h>
 #include <esp_heap_caps.h>
 
 #define UI_W 128
@@ -45,7 +46,15 @@
 #define F_BIG  2
 #define F_HUGE 3
 
-static inline const GFXfont* uiFace(uint8_t id) { (void)id; return &Org_01; }
+// 0 = Org_01 (pixel), 1 = TomThumb (compact). Set by the `set_font` command.
+static uint8_t uiFontFaceMode = 0;
+
+static inline const GFXfont* uiFace(uint8_t id) {
+  (void)id;
+  // Selected from the web panel ("Display -> Font"). Both faces share the same
+  // integer scale steps, so layout coordinates stay valid when switching.
+  return uiFontFaceMode ? &TomThumb : &Org_01;
+}
 static inline uint8_t uiScale(uint8_t id) {
   switch (id) {
     case F_BOLD:
@@ -343,7 +352,11 @@ static int uiWrap(const char* s, uint8_t fid, int maxW, char out[][40], int maxL
       lastFit = pos + l;
     }
     int l = lastFit - pos; if (l > 39) l = 39;
-    memcpy(out[n], t + pos, l); out[n][l] = 0; n++;
+    memcpy(out[n], t + pos, l); out[n][l] = 0;
+    // Hard guarantee: a line can never be wider than the window, whatever the
+    // wrapping path produced.
+    uiFit(out[n], 40, out[n], fid, maxW);
+    n++;
     pos = lastFit;
   }
   while (pos < len && t[pos] == ' ') pos++;
@@ -366,7 +379,11 @@ static uint16_t* uiBgCache = nullptr;
 static uint32_t  uiBgKey = 0xFFFFFFFF;
 
 static void uiBackground(uint16_t glow, uint8_t amt = 34) {
-  uint32_t key = ((uint32_t)theme.bg << 16) ^ ((uint32_t)glow << 3) ^ amt;
+  const bool wp = hasWallpaper && wallpaperBuf != nullptr;
+  uint32_t key = wp
+      ? (0xB0000000u ^ ((uint32_t)wallpaperVersion * 2654435761u)
+         ^ ((uint32_t)theme.bg << 16) ^ ((uint32_t)wallpaperOpacity << 4) ^ amt)
+      : (((uint32_t)theme.bg << 16) ^ ((uint32_t)glow << 3) ^ amt);
   if (!uiBgCache) {
     uiBgCache = (uint16_t*)heap_caps_malloc(UI_W * UI_H * sizeof(uint16_t), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     if (!uiBgCache) uiBgCache = (uint16_t*)malloc(UI_W * UI_H * sizeof(uint16_t));
@@ -374,19 +391,32 @@ static void uiBackground(uint16_t glow, uint8_t amt = 34) {
   }
   if (uiBgCache && key != uiBgKey) {
     for (int y = 0; y < UI_H; y++) {
-      uint16_t c = theme.bg;
-      if (y < 72) { float k = 1.0f - y / 72.0f; c = uiLerp(theme.bg, glow, (uint8_t)(amt * k * k)); }
       uint16_t* r = uiBgCache + y * UI_W;
-      for (int x = 0; x < UI_W; x++) r[x] = c;
+      if (wp) {
+        const uint16_t* s = wallpaperBuf + y * UI_W;
+        // Extra scrim behind the header keeps the title readable on busy art.
+        int extra = y < 20 ? 16 : 0;
+        uint8_t dark = (uint8_t)constrain((int)wallpaperOpacity + extra, 0, 255);
+        for (int x = 0; x < UI_W; x++) r[x] = uiLerp(s[x], theme.bg, dark);
+      } else {
+        uint16_t c = theme.bg;
+        if (y < 72) { float k = 1.0f - y / 72.0f; c = uiLerp(theme.bg, glow, (uint8_t)(amt * k * k)); }
+        for (int x = 0; x < UI_W; x++) r[x] = c;
+      }
     }
     uiBgKey = key;
   }
   if (uiBgCache) { memcpy(uiFb(), uiBgCache, UI_W * UI_H * sizeof(uint16_t)); return; }
   for (int y = 0; y < UI_H; y++) {
-    uint16_t c = theme.bg;
-    if (y < 72) { float k = 1.0f - y / 72.0f; c = uiLerp(theme.bg, glow, (uint8_t)(amt * k * k)); }
     uint16_t* r = uiFb() + y * UI_W;
-    for (int x = 0; x < UI_W; x++) r[x] = c;
+    if (wp) {
+      const uint16_t* s = wallpaperBuf + y * UI_W;
+      for (int x = 0; x < UI_W; x++) r[x] = uiLerp(s[x], theme.bg, wallpaperOpacity);
+    } else {
+      uint16_t c = theme.bg;
+      if (y < 72) { float k = 1.0f - y / 72.0f; c = uiLerp(theme.bg, glow, (uint8_t)(amt * k * k)); }
+      for (int x = 0; x < UI_W; x++) r[x] = c;
+    }
   }
 }
 
@@ -750,13 +780,19 @@ void drawLyricsPage() {
     return;
   }
 
+  // Lyrics are the one place where content length is unbounded, so wrap at the
+  // panel width using the body face (7px -> ~19 chars per line) and allow four
+  // lines. At the 14px face only ~9 chars fit, which is what truncated long
+  // lines before.
+  const int LY_MAXW = 118;
   if (strcmp(lyKey, state.lyricCur) != 0) {
     strncpy(lyKey, state.lyricCur, sizeof(lyKey) - 1);
-    lyN = uiWrap(state.lyricCur[0] ? state.lyricCur : "...", F_BOLD, 112, lyLines, 3);
+    lyKey[sizeof(lyKey) - 1] = 0;
+    lyN = uiWrap(state.lyricCur[0] ? state.lyricCur : "...", F_REG, LY_MAXW, lyLines, 4);
     lyChangeMs = uiNowMs;
   }
   float t = uiEaseOut((uiNowMs - lyChangeMs) / 380.0f);
-  int slide = (int)((1.0f - t) * 10.0f);
+  int slide = (int)((1.0f - t) * 8.0f);
 
   uiPill(8, 22, 14, state.lyricsSynced ? "SYNCED" : "UNSYNCED", F_REG,
          state.lyricsSynced ? theme.success : theme.warning,
@@ -766,11 +802,16 @@ void drawLyricsPage() {
     uiText(120, 33, p, F_REG, theme.secondary, 2);
   }
 
-  uiTextFit(64, 50 + slide / 4, state.lyricPrev, F_REG, uiFade(theme.text, 0.42f), 112, 1);
-  int step = 16, block = lyN * step, first = 86 - block / 2 + 14 + slide;
+  uiTextFit(64, 51 + slide / 4, state.lyricPrev, F_REG, uiFade(theme.text, 0.45f), LY_MAXW, 1);
+
+  const int step = 9;
+  int block = lyN * step, first = 80 - block / 2 + 7 + slide;
   for (int i = 0; i < lyN; i++)
-    uiText(64, first + i * step, lyLines[i], F_BOLD, uiFade(accent, 0.25f + 0.75f * t), 1);
-  uiTextFit(64, 128 + slide / 3, state.lyricNext, F_REG, uiFade(theme.text, 0.40f * t + 0.1f), 112, 1);
+    if (lyLines[i][0])
+      uiTextFit(64, first + i * step, lyLines[i], F_REG,
+                uiFade(accent, 0.30f + 0.70f * t), LY_MAXW, 1);
+
+  uiTextFit(64, 112 + slide / 3, state.lyricNext, F_REG, uiFade(theme.text, 0.45f * t + 0.12f), LY_MAXW, 1);
   uiPageDots();
 }
 

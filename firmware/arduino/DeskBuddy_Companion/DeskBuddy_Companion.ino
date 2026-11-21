@@ -444,6 +444,16 @@ bool hasCoverThumb = false;
 bool hasLyricsBg = false;
 char coverTrack[64] = "";
 
+// Permanent wallpaper (set from the web panel). Streamed in chunks, kept in
+// PSRAM and re-pushed by the backend on every connect.
+#define WALLPAPER_CHUNK 1536
+uint16_t* wallpaperBuf = nullptr;    // 128x160 RGB565, little-endian
+bool      hasWallpaper = false;
+uint8_t   wallpaperOpacity = 150;    // scrim toward theme.bg (0..255)
+uint32_t  wallpaperVersion = 0;
+uint32_t  wallpaperRecv = 0;
+uint32_t  wallpaperTotal = 0;
+
 int decodeBase64(const char* input, uint8_t* output, int maxOut) {
   static const int8_t T[256] = {
     -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
@@ -973,6 +983,28 @@ const char* batteryLabel() {
 // ----------------------------------------------------------------------------
 // Buttons and page navigation
 // ----------------------------------------------------------------------------
+// Remappable buttons. Numeric values match BUTTON_ACTIONS in the backend
+// (app/services/device_settings.py) - do not reorder without updating both.
+enum : uint8_t {
+  BA_NEXT_PAGE, BA_PREV_PAGE, BA_PLAY_PAUSE, BA_VOL_UP, BA_VOL_DOWN,
+  BA_TOGGLE_MODE, BA_VOICE, BA_NONE, BA_DEFAULT, BA_COUNT
+};
+uint8_t buttonMap[5][PAGE_COUNT];
+
+void resetButtonMap() {
+  for (int b = 0; b < 5; b++)
+    for (int p = 0; p < PAGE_COUNT; p++) buttonMap[b][p] = BA_DEFAULT;
+  for (int p = 0; p < PAGE_COUNT; p++) {
+    buttonMap[0][p] = BA_TOGGLE_MODE;   // MODE
+    buttonMap[1][p] = BA_VOICE;         // VOICE
+    buttonMap[2][p] = BA_PREV_PAGE;     // UP
+    buttonMap[3][p] = BA_NEXT_PAGE;     // DOWN
+    buttonMap[4][p] = BA_DEFAULT;       // SELECT - contextual
+  }
+}
+
+void handleButtonDefault(int index);
+
 void checkButtons() {
   unsigned long now = millis();
   for (int i = 0; i < 5; i++) {
@@ -996,6 +1028,40 @@ void checkButtons() {
 }
 
 void handleButton(int index) {
+  switch (buttonMap[index][page]) {
+    case BA_NEXT_PAGE: nextPage(); break;
+    case BA_PREV_PAGE: previousPage(); break;
+
+    case BA_PLAY_PAUSE:
+      state.musicPlaying = !state.musicPlaying;
+      sendMusicAction(state.musicPlaying ? "play" : "pause");
+      beep(state.musicPlaying ? 1500 : 900, 55);
+      tftDirty = true;
+      break;
+
+    case BA_VOL_UP:   sendMusicAction("volume_up");   beep(1700, 35); break;
+    case BA_VOL_DOWN: sendMusicAction("volume_down"); beep(800, 35); break;
+
+    case BA_TOGGLE_MODE: toggleMode(); break;
+
+    case BA_VOICE:
+      triggerWake(2200);
+      targetExpr = EXPR_CURIOUS;
+      currentExpr = EXPR_CURIOUS;
+      beep(1400, 55);
+      sendButton("voice");
+      break;
+
+    case BA_NONE:
+      break;
+
+    default:
+      handleButtonDefault(index);
+      break;
+  }
+}
+
+void handleButtonDefault(int index) {
   switch (index) {
     case 0:  // MODE
       toggleMode();
@@ -1196,6 +1262,65 @@ void handleBackendLine(const String& line) {
     tftDirty = true;
     tftFullRedraw = true;
     beep(1200, 60);
+  } else if (strcmp(cmd, "set_buttons") == 0) {
+    JsonArrayConst arr = payload["map"].as<JsonArrayConst>();
+    int idx = 0;
+    for (JsonVariantConst v : arr) {
+      if (idx >= 5 * PAGE_COUNT) break;
+      int a = v.as<int>();
+      buttonMap[idx / PAGE_COUNT][idx % PAGE_COUNT] =
+          (uint8_t)constrain(a, 0, (int)BA_COUNT - 1);
+      idx++;
+    }
+    if (idx > 0) beep(1300, 40);
+  } else if (strcmp(cmd, "set_font") == 0) {
+    const char* face = payload["face"] | "pixel";
+    uiFontFaceMode = (strcmp(face, "compact") == 0) ? 1 : 0;
+    int op = payload["opacity"] | -1;
+    if (op >= 0) {
+      wallpaperOpacity = (uint8_t)constrain(op, 0, 255);
+      wallpaperVersion++;
+    }
+    tftDirty = true;
+    tftFullRedraw = true;
+  } else if (strcmp(cmd, "wallpaper_begin") == 0) {
+    if (!wallpaperBuf) {
+      wallpaperBuf = psramFound()
+          ? (uint16_t*)ps_malloc(TFT_W * TFT_H * sizeof(uint16_t))
+          : (uint16_t*)malloc(TFT_W * TFT_H * sizeof(uint16_t));
+    }
+    wallpaperTotal = (uint32_t)(payload["total"] | 0);
+    wallpaperRecv = 0;
+    hasWallpaper = false;
+  } else if (strcmp(cmd, "wallpaper_chunk") == 0) {
+    if (wallpaperBuf) {
+      int seq = payload["seq"] | 0;
+      const char* b64 = payload["data"] | "";
+      if (seq >= 0 && b64[0] != '\0') {
+        long off = (long)seq * WALLPAPER_CHUNK;
+        long room = (long)(TFT_W * TFT_H * 2) - off;
+        int maxOut = (int)(room > WALLPAPER_CHUNK ? WALLPAPER_CHUNK : room);
+        if (maxOut > 0) {
+          int n = decodeBase64(b64, ((uint8_t*)wallpaperBuf) + off, maxOut);
+          if (n > 0) wallpaperRecv = (uint32_t)off + (uint32_t)n;
+        }
+      }
+    }
+  } else if (strcmp(cmd, "wallpaper_end") == 0) {
+    int op = payload["opacity"] | wallpaperOpacity;
+    wallpaperOpacity = (uint8_t)constrain(op, 0, 255);
+    hasWallpaper = (wallpaperBuf != nullptr) &&
+                   (wallpaperRecv >= (uint32_t)(TFT_W * TFT_H * 2));
+    wallpaperVersion++;
+    tftDirty = true;
+    tftFullRedraw = true;
+    Serial.printf("[wallpaper] %s recv=%lu\n", hasWallpaper ? "ready" : "incomplete",
+                  (unsigned long)wallpaperRecv);
+  } else if (strcmp(cmd, "wallpaper_clear") == 0) {
+    hasWallpaper = false;
+    wallpaperVersion++;
+    tftDirty = true;
+    tftFullRedraw = true;
   } else if (strcmp(cmd, "mode_switch") == 0) {
     const char* requested = payload["mode"] | "desk_buddy";
     mode = (strcmp(requested, "inspection") == 0) ? MODE_INSPECTION : MODE_DESK_BUDDY;
@@ -2252,6 +2377,7 @@ void setup() {
 
   Serial.println("[boot] buttons"); Serial.flush();
   initButtons();
+  resetButtonMap();
   Serial.println("[boot] oled"); Serial.flush();
   initOled();
   Serial.println("[boot] tft"); Serial.flush();

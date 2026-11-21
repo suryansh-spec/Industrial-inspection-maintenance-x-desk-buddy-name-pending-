@@ -78,6 +78,15 @@ async def connect_device(port: Optional[str] = None):
 
     serial_state.set_serial_manager(manager)
     companion_service.touch_device()
+
+    # Re-apply the panel-owned settings (theme, buttons, font, wallpaper) so the
+    # device comes back exactly as the user left it, even after a re-flash.
+    try:
+        from app.services.device_settings import push_all
+        await push_all(manager)
+    except Exception:  # pragma: no cover - hardware dependent
+        pass
+
     return {"status": "connected", "port": manager.port}
 
 

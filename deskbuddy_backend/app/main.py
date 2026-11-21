@@ -98,6 +98,11 @@ async def lifespan(app: FastAPI):
 
     if settings.enable_companion:
         await _optional_startup("Companion service", companion_service.start())
+        try:
+            from app.services.device_settings import store
+            companion_service.activity.set_thresholds(store.get("sleep_thresholds") or {})
+        except Exception:  # pragma: no cover - settings are optional
+            logger.debug("Could not apply sleep thresholds", exc_info=True)
 
     # Background tasks
     _background_tasks.append(asyncio.create_task(ws_heartbeat_task()))
@@ -110,6 +115,8 @@ async def lifespan(app: FastAPI):
             _background_tasks.append(asyncio.create_task(lyrics_refresh_task()))
         # Gaming mode tick (every 5 seconds)
         _background_tasks.append(asyncio.create_task(gaming_tick_task()))
+        # User-authored notification rules (every 5 seconds)
+        _background_tasks.append(asyncio.create_task(notification_rules_task()))
 
     logger.info("DeskBuddy Backend started successfully")
 
@@ -333,6 +340,17 @@ async def gaming_tick_task():
             await gaming_service.tick()
         except Exception:
             logger.debug("Gaming tick failed", exc_info=True)
+        await asyncio.sleep(5.0)
+
+
+async def notification_rules_task():
+    """Evaluate user-authored IF/THEN notification rules."""
+    while True:
+        try:
+            from app.services.rule_engine import rule_engine
+            await rule_engine.tick()
+        except Exception:
+            logger.debug("Notification rule tick failed", exc_info=True)
         await asyncio.sleep(5.0)
 
 
