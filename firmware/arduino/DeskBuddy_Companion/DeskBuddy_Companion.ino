@@ -703,10 +703,7 @@ void initTft() {
   SPI.begin(PIN_TFT_SCLK, -1, PIN_TFT_MOSI, PIN_TFT_CS);
   tft.initR(INITR_BLACKTAB);
   tft.setRotation(2);
-  // Use RGB color order. ST7735 BLACKTAB defaults to BGR (0xC8) which
-  // swaps red<->blue on this panel. sendCommand is the library's proven path.
-  uint8_t madctl = 0x08;  // BGR, rotation 2
-  tft.sendCommand(ST77XX_MADCTL, &madctl, 1);
+  // Library default for BLACKTAB rotation 2: RGB (0x00). No override.
   tft.fillScreen(theme.bg);
   tft.setTextWrap(false);
   tft.setTextSize(1);
@@ -2236,30 +2233,14 @@ void formatTime(int seconds, char* buffer, size_t size) {
 void drawHeader(const char* title) {
   int width = tft.width();
   tft.fillScreen(theme.bg);
-  // Subtle header gradient (top band)
-  for (int y = 0; y < 15; y++) {
-    uint8_t mix = (uint8_t)(y * 6);
-    uint16_t c = tft.color565(
-      ((theme.headerBg >> 11) & 0x1F) * 8 + mix / 4,
-      ((theme.headerBg >> 5) & 0x3F) * 4 + mix / 4,
-      (theme.headerBg & 0x1F) * 8 + mix / 4);
-    tft.drawFastHLine(0, y, width, c);
-  }
+  tft.fillRect(0, 0, width, 15, theme.headerBg);
   tft.setTextSize(1);
   tft.setTextColor(theme.headerText, theme.headerBg);
   tft.setCursor(4, 4);
   tft.print(title);
 
-  // Pulsing status dot
-  float pulse = 0.5f + 0.5f * sin(millis() / 400.0f);
-  int dotR = 2 + (int)(pulse * 2.0f);
   uint16_t linkColor = state.backendOnline ? theme.success : theme.danger;
-  tft.fillCircle(width - 8, 7, dotR + 2, theme.bg);
-  tft.fillCircle(width - 8, 7, dotR, linkColor);
-  // Glow ring
-  if (state.backendOnline) {
-    tft.drawCircle(width - 8, 7, dotR + 3, theme.success);
-  }
+  tft.fillCircle(width - 8, 7, 3, linkColor);
 }
 
 void drawBar(int x, int y, int w, int h, float percent, uint16_t color) {
