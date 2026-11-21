@@ -85,7 +85,7 @@ class LyricsService:
         if self._client is None or self._client.is_closed:
             self._client = httpx.AsyncClient(
                 base_url=LRCLIB_BASE,
-                timeout=httpx.Timeout(6.0),
+                timeout=httpx.Timeout(3.0),
                 headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
             )
         return self._client

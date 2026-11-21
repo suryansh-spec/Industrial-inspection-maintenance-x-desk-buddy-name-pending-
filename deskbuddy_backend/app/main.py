@@ -341,7 +341,8 @@ async def companion_state_task():
     interval = max(0.5, float(settings.companion_push_interval))
     while True:
         try:
-            await companion_service.refresh_lyrics()
+            # Lyrics are refreshed by lyrics_refresh_task; do not block the
+            # state push on a (possibly slow) LRCLIB network lookup.
             summary = companion_service.get_summary()
             await ws_manager.broadcast("deskbuddy_state", summary)
             await ws_manager.broadcast(
