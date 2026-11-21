@@ -429,10 +429,10 @@ unsigned long buttonDebounceMs[5] = {0, 0, 0, 0, 0};
 // ----------------------------------------------------------------------------
 // Cover Art and Blurred Lyrics Background (PSRAM)
 // ----------------------------------------------------------------------------
-#define COVER_THUMB_W 80
-#define COVER_THUMB_H 80
-#define COVER_BG_SRC_W 64
-#define COVER_BG_SRC_H 80
+#define COVER_THUMB_W 40
+#define COVER_THUMB_H 40
+#define COVER_BG_SRC_W 32
+#define COVER_BG_SRC_H 40
 #define TFT_W 128
 #define TFT_H 160
 
@@ -1158,7 +1158,7 @@ void handleBackendLine(const String& line) {
   } else if (strcmp(cmd, "cover_bg") == 0) {
     const char* b64 = payload["data"] | "";
     if (lyricsBg != nullptr && b64[0] != '\0') {
-      uint16_t tempSrc[COVER_BG_SRC_W * COVER_BG_SRC_H];
+      static uint16_t tempSrc[COVER_BG_SRC_W * COVER_BG_SRC_H];
       decodeBase64(b64, (uint8_t*)tempSrc, sizeof(tempSrc));
       upscaleCoverBg(tempSrc, COVER_BG_SRC_W, COVER_BG_SRC_H, lyricsBg, TFT_W, TFT_H);
       hasLyricsBg = true;
@@ -2420,43 +2420,41 @@ void drawMusicPage() {
   if (tftFullRedraw) {
     drawHeader("MUSIC");
 
-    // 80x80 Album Cover Art centered at top (24, 18)
-    int coverX = (tft.width() - COVER_THUMB_W) / 2;
-    int coverY = 18;
+    // 40x40 Album Cover Art at (4, 20)
     if (hasCoverThumb && coverThumb != nullptr) {
-      tft.drawRGBBitmap(coverX, coverY, coverThumb, COVER_THUMB_W, COVER_THUMB_H);
-      tft.drawRect(coverX - 1, coverY - 1, COVER_THUMB_W + 2, COVER_THUMB_H + 2, theme.secondary);
+      tft.drawRGBBitmap(4, 20, coverThumb, COVER_THUMB_W, COVER_THUMB_H);
+      tft.drawRect(3, 19, 42, 42, theme.secondary);
     } else {
-      tft.drawRect(coverX - 1, coverY - 1, COVER_THUMB_W + 2, COVER_THUMB_H + 2, theme.secondary);
-      tft.fillRect(coverX, coverY, COVER_THUMB_W, COVER_THUMB_H, theme.headerBg);
-      tft.setTextSize(3);
+      tft.drawRect(3, 19, 42, 42, theme.secondary);
+      tft.fillRect(4, 20, 40, 40, theme.headerBg);
+      tft.setTextSize(2);
       tft.setTextColor(theme.accent, theme.headerBg);
-      tft.setCursor(coverX + 28, coverY + 24);
+      tft.setCursor(18, 32);
       tft.print("M");
       tft.setTextSize(1);
     }
 
-    // Title & Artist below the cover
+    // Title & Artist aligned to the right of the cover (X=50)
     tft.setTextColor(theme.accent, theme.bg);
     tft.setTextSize(1);
-    tft.setCursor(4, 102);
-    printTrunc(state.musicTitle, 20);
+    tft.setCursor(50, 22);
+    printTrunc(state.musicTitle, 12);
     copyText(lastMusicTitle, sizeof(lastMusicTitle), state.musicTitle);
 
     tft.setTextColor(theme.secondary, theme.bg);
-    tft.setCursor(4, 114);
-    printTrunc(state.musicArtist[0] ? state.musicArtist : "Unknown artist", 20);
+    tft.setCursor(50, 36);
+    printTrunc(state.musicArtist[0] ? state.musicArtist : "Unknown artist", 12);
 
     tft.setTextColor(state.musicPlaying ? theme.success : theme.warning, theme.bg);
-    tft.setCursor(95, 114);
-    tft.print(state.musicPlaying ? "PLAY" : "PAUSE");
+    tft.setCursor(50, 50);
+    tft.print(state.musicPlaying ? "PLAYING" : "PAUSED");
 
-    // Progress bar + text underneath cover (Y >= 126)
+    // Progress bar + text + status underneath (Y >= 68)
     int percentFull = 0;
     if (state.musicDuration > 0) {
       percentFull = (state.musicProgress * 100) / state.musicDuration;
     }
-    drawBar(4, 126, 120, 8, (float)percentFull, theme.success);
+    drawBar(4, 68, 120, 8, (float)percentFull, theme.success);
 
     char progressTextFull[24];
     char currentTextFull[12];
@@ -2465,8 +2463,15 @@ void drawMusicPage() {
     formatTime(state.musicDuration, totalTextFull, sizeof(totalTextFull));
     snprintf(progressTextFull, sizeof(progressTextFull), "%s / %s", currentTextFull, totalTextFull);
     tft.setTextColor(theme.text, theme.bg);
-    tft.setCursor(4, 138);
+    tft.setCursor(4, 82);
     tft.print(progressTextFull);
+
+    // Footer hints (static)
+    tft.setTextColor(theme.secondary, theme.bg);
+    tft.setCursor(4, 101);
+    tft.print("SELECT play/pause");
+    tft.setCursor(4, 114);
+    tft.print("UP/DOWN pages");
 
     // Track for partial refresh
     lastMusicPlaying = state.musicPlaying;
@@ -2483,7 +2488,7 @@ void drawMusicPage() {
     percent = (state.musicProgress * 100) / state.musicDuration;
   }
   if (percent != lastMusicPercent || tftFullRedraw) {
-    drawBar(4, 126, 120, 8, (float)percent, theme.success);
+    drawBar(4, 68, 120, 8, (float)percent, theme.success);
     lastMusicPercent = percent;
   }
 
@@ -2495,9 +2500,9 @@ void drawMusicPage() {
   formatTime(state.musicDuration, totalText, sizeof(totalText));
   snprintf(progressText, sizeof(progressText), "%s / %s", currentText, totalText);
   if (strcmp(progressText, lastProgressText) != 0) {
-    tft.fillRect(4, 138, 120, 10, theme.bg);
+    tft.fillRect(4, 82, 120, 10, theme.bg);
     tft.setTextColor(theme.text, theme.bg);
-    tft.setCursor(4, 138);
+    tft.setCursor(4, 82);
     tft.print(progressText);
     strncpy(lastProgressText, progressText, sizeof(lastProgressText) - 1);
     lastProgressText[sizeof(lastProgressText) - 1] = '\0';
