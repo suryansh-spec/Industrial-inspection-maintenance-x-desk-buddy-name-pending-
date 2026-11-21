@@ -25,3 +25,6 @@ Thumbs.db
 
 # Temp
 *.tmp
+
+# Embedded git repos / nested
+ml/signa_ fault_classification_pipeline/

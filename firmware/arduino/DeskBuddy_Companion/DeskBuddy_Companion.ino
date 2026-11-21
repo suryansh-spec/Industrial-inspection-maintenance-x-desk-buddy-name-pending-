@@ -264,6 +264,8 @@ enum EyeExpression {
   EXPR_SLEEPING,
   EXPR_DEEP_SLEEP,
   EXPR_AUTONOMOUS,
+  EXPR_TALKING,   // Voice agent active — animated waveform mouth
+  EXPR_ALARMED,   // Fault detected — wide eyes + alert frame
   EXPR_COUNT
 };
 
@@ -621,6 +623,8 @@ const char* expressionName(EyeExpression value) {
     case EXPR_SLEEPING: return "sleeping";
     case EXPR_DEEP_SLEEP: return "deep_sleep";
     case EXPR_AUTONOMOUS: return "autonomous";
+    case EXPR_TALKING:    return "talking";
+    case EXPR_ALARMED:    return "alarmed";
     default: return "relaxed";
   }
 }
@@ -646,6 +650,8 @@ EyeExpression expressionFromString(const char* value) {
   if (strcmp(value, "sleeping") == 0) return EXPR_SLEEPING;
   if (strcmp(value, "deep_sleep") == 0) return EXPR_DEEP_SLEEP;
   if (strcmp(value, "autonomous") == 0) return EXPR_AUTONOMOUS;
+  if (strcmp(value, "talking") == 0) return EXPR_TALKING;
+  if (strcmp(value, "alarmed") == 0) return EXPR_ALARMED;
   return EXPR_RELAXED;
 }
 
@@ -1758,6 +1764,39 @@ void drawSparkle(int x, int y) {
   oled.setDrawColor(1);
   oled.drawVLine(x, y - 3, 7);
   oled.drawHLine(x - 3, y, 7);
+}
+
+// Animated voice waveform bars at bottom-centre (TALKING expression)
+void drawWaveformMouth(unsigned long now) {
+  oled.setDrawColor(1);
+  // 5 bars with sine-offset phases — heights 2..8
+  int bars[5];
+  for (int i = 0; i < 5; i++) {
+    float phase = now / 180.0f + i * 0.9f;
+    bars[i] = 2 + (int)(abs(sin(phase)) * 6.0f);
+  }
+  int startX = 42;
+  for (int i = 0; i < 5; i++) {
+    int bx = startX + i * 7;
+    int bh = bars[i];
+    oled.drawRBox(bx, 54 - bh, 5, bh, 1);
+  }
+}
+
+// Pulsing dashed alert border frame (ALARMED expression)
+void drawAlertFrame(unsigned long now) {
+  oled.setDrawColor(1);
+  bool pulse = ((now / 300) % 2) == 0;
+  if (pulse) {
+    // Corner brackets — 4 corners, 6px lines
+    oled.drawHLine(0,  0,  12); oled.drawVLine(0,  0, 10);
+    oled.drawHLine(116, 0, 12); oled.drawVLine(127, 0, 10);
+    oled.drawHLine(0,  63, 12); oled.drawVLine(0, 54, 10);
+    oled.drawHLine(116,63, 12); oled.drawVLine(127,54, 10);
+    // Exclamation mark centred at bottom
+    oled.drawVLine(63, 54, 5);
+    oled.drawPixel(63, 61);
+  }
 }
 
 void drawStatusLabel() {
