@@ -107,12 +107,23 @@ class CompanionService:
             key = lyrics_service.cache_key(title, artist, duration_ms)
             if key != self._lyrics_track_key:
                 self._lyrics_track_key = key
-                self._lyrics_track = await lyrics_service.load(
-                    title, artist, duration_ms
-                )
-                asyncio.create_task(
-                    self._sync_cover_art(title, artist, music.get("album_art_url"))
-                )
+                # Fetch in the background so the state push is never blocked by
+                # a slow LRCLIB request. The window updates on the next tick.
+                async def _fetch() -> None:
+                    try:
+                        track = await lyrics_service.load(title, artist, duration_ms)
+                        self._lyrics_track = track
+                        self._lyrics_window = lyrics_window(track, progress_ms)
+                        asyncio.create_task(
+                            self._sync_cover_art(title, artist, music.get("album_art_url"))
+                        )
+                    except Exception:
+                        pass
+
+                asyncio.create_task(_fetch())
+                # Keep showing the previous window until the fetch completes.
+                self._lyrics_window = lyrics_window(self._lyrics_track, progress_ms)
+                return self._lyrics_window
 
             self._lyrics_window = lyrics_window(self._lyrics_track, progress_ms)
             return self._lyrics_window
