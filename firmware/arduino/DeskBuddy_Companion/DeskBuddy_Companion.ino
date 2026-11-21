@@ -700,7 +700,7 @@ void initTft() {
 
   SPI.begin(PIN_TFT_SCLK, -1, PIN_TFT_MOSI, PIN_TFT_CS);
   tft.initR(INITR_BLACKTAB);
-  tft.setRotation(0);
+  tft.setRotation(2);
   // Use RGB color order. ST7735 BLACKTAB defaults to BGR (0xC8) which
   // swaps red<->blue on this panel. sendCommand is the library's proven path.
   uint8_t madctl = 0xC0;  // MX|MY, RGB
