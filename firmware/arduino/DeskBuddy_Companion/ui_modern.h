@@ -25,6 +25,9 @@
 #define UI_H 160
 #define UI_FRAME_MS 33          // ~30 fps
 #define UI_TRANSITION_MS 260
+#ifndef UI_PROFILE
+#define UI_PROFILE 0
+#endif
 #define UI_PI 3.14159265f
 #define UI_HALF_PI 1.57079633f
 #define UI_TWO_PI 6.28318531f
@@ -142,14 +145,17 @@ static void uiArc(float cx, float cy, float rMid, float th, float frac, uint16_t
   float sweep = frac * UI_TWO_PI;
   bool full = frac >= 0.999f;
   float a0 = -UI_HALF_PI + rot, a1 = a0 + sweep;
-  float c0x = cx + rMid * cosf(a0), c0y = cy + rMid * sinf(a0);
-  float c1x = cx + rMid * cosf(a1), c1y = cy + rMid * sinf(a1);
+  float u0x = cosf(a0), u0y = sinf(a0), u1x = cosf(a1), u1y = sinf(a1);
+  float c0x = cx + rMid * u0x, c0y = cy + rMid * u0y;
+  float c1x = cx + rMid * u1x, c1y = cy + rMid * u1y;
+  bool longSweep = sweep > UI_PI;
   int x0 = (int)floorf(cx - rO - 1), x1 = (int)ceilf(cx + rO + 1);
   int y0 = (int)floorf(cy - rO - 1), y1 = (int)ceilf(cy + rO + 1);
   float lo = rI - 1.0f; float lo2 = lo > 0 ? lo * lo : -1.0f, hi2 = (rO + 1.0f) * (rO + 1.0f);
   for (int y = y0; y <= y1; y++) {
+    float py = y + 0.5f;
     for (int x = x0; x <= x1; x++) {
-      float px = x + 0.5f, py = y + 0.5f;
+      float px = x + 0.5f;
       float dx = px - cx, dy = py - cy, d2 = dx * dx + dy * dy;
       if (d2 > hi2 || d2 < lo2) continue;
       float d = sqrtf(d2);
@@ -157,10 +163,14 @@ static void uiArc(float cx, float cy, float rMid, float th, float frac, uint16_t
       float cov = 0;
       if (full) cov = ring;
       else {
-        float ang = atan2f(dy, dx) + UI_HALF_PI - rot;
-        while (ang < 0) ang += UI_TWO_PI;
-        while (ang >= UI_TWO_PI) ang -= UI_TWO_PI;
-        if (ang <= sweep) cov = ring;
+        // Cheap wedge membership via cross products (no atan2 per pixel).
+        bool inside;
+        if (!longSweep) {
+          inside = (u0x * dy - u0y * dx) >= 0.0f && (dx * u1y - dy * u1x) >= 0.0f;
+        } else {
+          inside = !((u1x * dy - u1y * dx) >= 0.0f && (dx * u0y - dy * u0x) >= 0.0f);
+        }
+        if (inside) cov = ring;
         float e0 = uiClamp01(cr - sqrtf((px - c0x) * (px - c0x) + (py - c0y) * (py - c0y)) + 0.5f);
         float e1 = uiClamp01(cr - sqrtf((px - c1x) * (px - c1x) + (py - c1y) * (py - c1y)) + 0.5f);
         if (e0 > cov) cov = e0;
@@ -171,29 +181,39 @@ static void uiArc(float cx, float cy, float rMid, float th, float frac, uint16_t
   }
 }
 
-// Rounded rectangle with optional vertical gradient and 1px border (SDF based).
+// Rounded rectangle with optional vertical gradient and 1px border.
+// The corner inset is solved once per row (one sqrtf per scanline) instead of a
+// sqrtf per pixel, which keeps full-frame animation cheap.
 static void uiCard(float x, float y, float w, float h, float r, uint16_t fill,
                    uint16_t border, uint8_t borderA = 0, uint8_t fillA = 255,
                    uint16_t fill2 = 0, bool grad = false) {
+  if (w <= 0.0f || h <= 0.0f) return;
   float hx = w * 0.5f, hy = h * 0.5f, cx = x + hx, cy = y + hy;
+  if (r < 0.0f) r = 0.0f;
   if (r > hx) r = hx;
   if (r > hy) r = hy;
-  int x0 = (int)floorf(x) - 1, y0 = (int)floorf(y) - 1;
-  int x1 = (int)ceilf(x + w) + 1, y1 = (int)ceilf(y + h) + 1;
-  for (int py = y0; py <= y1; py++) {
-    if (py < 0 || py >= UI_H) continue;
+  int py0 = (int)floorf(y);      if (py0 < 0) py0 = 0;
+  int py1 = (int)ceilf(y + h);   if (py1 > UI_H) py1 = UI_H;
+  float band = hy - r;
+  for (int py = py0; py < py1; py++) {
+    float qy = py + 0.5f;
+    float dy = fabsf(qy - cy) - band;
+    float inset = 0.0f;
+    if (dy > 0.0f) {
+      if (dy >= r) continue;                 // above/below the rounded body
+      inset = r - sqrtf(r * r - dy * dy);    // horizontal corner inset
+    }
+    float xl = x + inset, xr = x + w - inset;
+    if (xr <= xl) continue;
     uint16_t rowc = grad ? uiLerp(fill, fill2, (uint8_t)(uiClamp01((py - y) / h) * 255)) : fill;
-    float qy = fabsf(py + 0.5f - cy) - (hy - r);
-    for (int px = x0; px <= x1; px++) {
-      if (px < 0 || px >= UI_W) continue;
-      float qx = fabsf(px + 0.5f - cx) - (hx - r);
-      float d;
-      if (qx > 0 || qy > 0) {
-        float ox = qx > 0 ? qx : 0, oy = qy > 0 ? qy : 0;
-        d = sqrtf(ox * ox + oy * oy) - r + fminf(fmaxf(qx, qy), 0.0f);
-      } else d = fmaxf(qx, qy) - r;
-      float cov = uiClamp01(0.5f - d);
-      if (cov <= 0) continue;
+    int px0 = (int)floorf(xl) - 1; if (px0 < 0) px0 = 0;
+    int px1 = (int)ceilf(xr) + 1;  if (px1 > UI_W) px1 = UI_W;
+    for (int px = px0; px < px1; px++) {
+      float qx = px + 0.5f;
+      float d = fmaxf(xl - qx, qx - xr);     // negative inside
+      float cov = 0.5f - d;
+      if (cov <= 0.0f) continue;
+      if (cov > 1.0f) cov = 1.0f;
       uint16_t c = rowc;
       if (borderA && d > -1.0f) c = uiLerp(c, border, (uint8_t)(uiClamp01(d + 1.0f) * borderA));
       uiPx(px, py, c, (uint8_t)(cov * fillA));
@@ -320,7 +340,30 @@ static void uiFmtTime(int sec, char* buf, size_t sz) {
 // ----------------------------------------------------------------------------
 // Small widgets
 // ----------------------------------------------------------------------------
+static uint16_t* uiBgCache = nullptr;
+static uint32_t  uiBgKey = 0xFFFFFFFF;
+
 static void uiBackground(uint16_t glow, uint8_t amt = 34) {
+  // The gradient only depends on (theme.bg, glow, amt), so build it once per
+  // combination and memcpy afterwards. This removes ~10k uiLerp calls/frame.
+  uint32_t key = ((uint32_t)theme.bg << 16) ^ ((uint32_t)glow << 3) ^ amt;
+  if (key != uiBgKey) {
+    if (!uiBgCache) uiBgCache = (uint16_t*)(psramFound() ? ps_malloc(UI_W * UI_H * sizeof(uint16_t))
+                                                       : malloc(UI_W * UI_H * sizeof(uint16_t)));
+    if (uiBgCache) {
+      for (int y = 0; y < UI_H; y++) {
+        uint16_t c = theme.bg;
+        if (y < 80) { float k = 1.0f - y / 80.0f; c = uiLerp(theme.bg, glow, (uint8_t)(amt * k * k)); }
+        uint16_t* r = uiBgCache + y * UI_W;
+        for (int x = 0; x < UI_W; x++) r[x] = c;
+      }
+      uiBgKey = key;
+    }
+  }
+  if (uiBgCache && uiBgKey == key) {
+    memcpy(uiFb(), uiBgCache, UI_W * UI_H * sizeof(uint16_t));
+    return;
+  }
   uint16_t* b = uiFb();
   for (int y = 0; y < UI_H; y++) {
     uint16_t c = theme.bg;
@@ -957,8 +1000,44 @@ void updateBacklight(unsigned long now) {
   if (out != lastBacklight) { analogWrite(PIN_TFT_BL, out); lastBacklight = out; }
 }
 
+static uint16_t* uiLastPush = nullptr;   // last frame actually sent to the panel
+static bool      uiPushValid = false;
+
+static inline bool uiRowDiff(const uint16_t* a, const uint16_t* b) {
+  const uint32_t* pa = (const uint32_t*)a;
+  const uint32_t* pb = (const uint32_t*)b;
+  for (int i = 0; i < UI_W / 2; i++) if (pa[i] != pb[i]) return true;
+  return false;
+}
+
+// Push only the rows that changed since the previous push. A static UI then
+// costs a few hundred microseconds of SPI instead of a fixed 16.6 ms.
 static void uiPush(const uint16_t* buf) {
-  tft.drawRGBBitmap(0, 0, (uint16_t*)buf, UI_W, UI_H);
+  if (!uiLastPush) uiLastPush = (uint16_t*)(psramFound() ? ps_malloc(UI_W * UI_H * sizeof(uint16_t))
+                                                        : malloc(UI_W * UI_H * sizeof(uint16_t)));
+  if (!uiLastPush || !uiPushValid) {
+    tft.drawRGBBitmap(0, 0, (uint16_t*)buf, UI_W, UI_H);
+    if (uiLastPush) { memcpy(uiLastPush, buf, UI_W * UI_H * sizeof(uint16_t)); uiPushValid = true; }
+    return;
+  }
+  int runStart = -1, runEnd = -1;
+  for (int y = 0; y < UI_H; y++) {
+    bool changed = uiRowDiff(buf + y * UI_W, uiLastPush + y * UI_W);
+    if (changed) {
+      if (runStart < 0) runStart = y;
+      runEnd = y;
+    } else if (runStart >= 0 && (y - runEnd) > 2) {
+      int h = runEnd - runStart + 1;
+      tft.drawRGBBitmap(0, runStart, (uint16_t*)(buf + runStart * UI_W), UI_W, h);
+      memcpy(uiLastPush + runStart * UI_W, buf + runStart * UI_W, UI_W * h * sizeof(uint16_t));
+      runStart = -1;
+    }
+  }
+  if (runStart >= 0) {
+    int h = runEnd - runStart + 1;
+    tft.drawRGBBitmap(0, runStart, (uint16_t*)(buf + runStart * UI_W), UI_W, h);
+    memcpy(uiLastPush + runStart * UI_W, buf + runStart * UI_W, UI_W * h * sizeof(uint16_t));
+  }
 }
 
 static void uiAllocTransitionBuffers() {
@@ -1036,7 +1115,27 @@ void drawTft(unsigned long now) {
     return;  // screen is dark in deep sleep; skip the work
   }
   tftFullRedraw = false;
+#if UI_PROFILE
+  unsigned long tR0 = micros();
+  const uint16_t* fbuf = uiFrame(now);
+  unsigned long tR1 = micros();
+  uiPush(fbuf);
+  unsigned long tR2 = micros();
+  static uint32_t accR = 0, accP = 0, maxR = 0, maxP = 0;
+  static uint16_t n = 0;
+  uint32_t r = tR1 - tR0, p = tR2 - tR1;
+  accR += r; accP += p;
+  if (r > maxR) maxR = r;
+  if (p > maxP) maxP = p;
+  if (++n >= 30) {
+    Serial.printf("#UI page=%d render=%.1fms push=%.1fms maxr=%.1f maxp=%.1f buf=0x%08x\n",
+                  (int)page, accR / 30.0f / 1000.0f, accP / 30.0f / 1000.0f,
+                  maxR / 1000.0f, maxP / 1000.0f, (uint32_t)(uintptr_t)sprite.getBuffer());
+    n = 0; accR = accP = maxR = maxP = 0;
+  }
+#else
   uiPush(uiFrame(now));
+#endif
 }
 
 // ----------------------------------------------------------------------------

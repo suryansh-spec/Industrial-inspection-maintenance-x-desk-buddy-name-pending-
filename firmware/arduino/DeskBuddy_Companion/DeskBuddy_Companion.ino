@@ -565,7 +565,18 @@ const char* activityLabel();
 // ----------------------------------------------------------------------------
 // Modern UI (sprite-based, anti-aliased)
 // ----------------------------------------------------------------------------
-GFXcanvas16 sprite(128, 160);
+// The framebuffer is touched per-pixel during software AA, so keep it in fast
+// internal SRAM instead of letting malloc place the 40 KB canvas in PSRAM.
+class InternalCanvas16 : public GFXcanvas16 {
+ public:
+  InternalCanvas16(uint16_t w, uint16_t h) : GFXcanvas16(w, h, false) {
+    uint32_t bytes = (uint32_t)w * h * 2;
+    buffer = (uint16_t*)heap_caps_malloc(bytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    if (!buffer) buffer = (uint16_t*)malloc(bytes);   // fall back if SRAM is tight
+    if (buffer) { memset(buffer, 0, bytes); buffer_owned = false; }
+  }
+};
+InternalCanvas16 sprite(128, 160);
 #include "ui_modern.h"
 
 // ----------------------------------------------------------------------------
@@ -2355,7 +2366,10 @@ void loop() {
   if (tftDirty || now - lastTftMs >= TFT_REFRESH_MS) {
     drawTft(now);
     tftDirty = false;
-    lastTftMs = now;
+    // advance on a fixed grid so heavy frames don't permanently drag the
+    // frame rate down; resync only if we fell more than one period behind
+    lastTftMs += TFT_REFRESH_MS;
+    if ((long)(now - lastTftMs) > (long)TFT_REFRESH_MS) lastTftMs = now;
   }
 
   if (now - lastHeartbeatMs >= HEARTBEAT_MS) {
