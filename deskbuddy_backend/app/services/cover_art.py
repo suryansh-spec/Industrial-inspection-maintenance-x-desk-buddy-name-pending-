@@ -121,14 +121,22 @@ class CoverArtService:
 
         try:
             with Image.open(io.BytesIO(image_bytes)) as original:
-                # 1. 40x40 thumbnail for PAGE_MUSIC
-                thumb_img = original.resize((40, 40), Image.Resampling.LANCZOS)
+                # 1. 80x80 thumbnail for PAGE_MUSIC (higher resolution)
+                thumb_img = original.resize((80, 80), Image.Resampling.LANCZOS)
                 thumb_rgb565 = image_to_rgb565(thumb_img)
                 thumb_b64 = base64.b64encode(thumb_rgb565).decode("ascii")
 
-                # 2. 32x40 blurred, darkened background for PAGE_LYRICS
+                # Dominant color for dynamic theme (quantized)
+                try:
+                    q = thumb_img.quantize(colors=1, method=Image.Quantize.MEDIANCUT)
+                    r, g, b = q.getpalette()[:3]
+                    dominant = "#{:02X}{:02X}{:02X}".format(r, g, b)
+                except Exception:
+                    dominant = None
+
+                # 2. 64x80 blurred, darkened background for PAGE_LYRICS
                 # Dim brightness to 22% so overlying lyrics text is sharp and high-contrast
-                bg_img = original.resize((32, 40), Image.Resampling.BOX)
+                bg_img = original.resize((64, 80), Image.Resampling.BOX)
                 bg_img = bg_img.filter(ImageFilter.GaussianBlur(radius=2.5))
                 enhancer = ImageEnhance.Brightness(bg_img)
                 bg_img = enhancer.enhance(0.22)
@@ -139,6 +147,7 @@ class CoverArtService:
                     "url": target_url,
                     "thumb_b64": thumb_b64,
                     "bg_b64": bg_b64,
+                    "dominant_color": dominant,
                 }
                 _ART_CACHE[key] = result
                 return result

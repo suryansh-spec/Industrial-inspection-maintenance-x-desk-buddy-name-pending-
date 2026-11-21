@@ -156,7 +156,8 @@ class CompanionService:
                 # 1. Send 40x40 thumbnail for PAGE_MUSIC
                 await manager.send_command(
                     "cover_thumb",
-                    {"track": title[:32], "data": assets["thumb_b64"]},
+                    {"track": title[:32], "data": assets["thumb_b64"],
+                     "dominant_color": assets.get("dominant_color")},
                 )
                 # 2. Send 32x40 blurred background for PAGE_LYRICS
                 await manager.send_command(
