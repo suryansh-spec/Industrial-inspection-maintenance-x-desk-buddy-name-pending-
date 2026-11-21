@@ -701,10 +701,10 @@ void initTft() {
   SPI.begin(PIN_TFT_SCLK, -1, PIN_TFT_MOSI, PIN_TFT_CS);
   tft.initR(INITR_BLACKTAB);
   tft.setRotation(0);
-  // Use RGB color order (clear BGR bit). Default BGR (0xC8) was causing
-  // red<->blue and yellow<->cyan swaps on this panel.
-  tft.writeCommand(0x36);
-  tft.writeData(0xC0);
+  // Use RGB color order. ST7735 BLACKTAB defaults to BGR (0xC8) which
+  // swaps red<->blue on this panel. sendCommand is the library's proven path.
+  uint8_t madctl = 0xC0;  // MX|MY, RGB
+  tft.sendCommand(ST77XX_MADCTL, &madctl, 1);
   tft.fillScreen(theme.bg);
   tft.setTextWrap(false);
   tft.setTextSize(1);
