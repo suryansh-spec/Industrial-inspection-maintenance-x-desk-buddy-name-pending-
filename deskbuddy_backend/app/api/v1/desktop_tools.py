@@ -115,6 +115,7 @@ class MusicStatusResponse(BaseModel):
     title: Optional[str] = None
     artist: Optional[str] = None
     album: Optional[str] = None
+    album_art_url: Optional[str] = None
     progress_ms: int = 0
     duration_ms: int = 0
     volume: int = 50
