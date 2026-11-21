@@ -2244,11 +2244,11 @@ void drawHeader(const char* title) {
 }
 
 void drawBar(int x, int y, int w, int h, float percent, uint16_t color) {
-  tft.drawRect(x, y, w, h, theme.secondary);
+  tft.drawRoundRect(x, y, w, h, h / 2, theme.secondary);
   if (isnan(percent) || percent < 0.0f) return;
   int fill = (int)((constrain(percent, 0.0f, 100.0f) / 100.0f) * (w - 2));
   if (fill > 0) {
-    tft.fillRect(x + 1, y + 1, fill, h - 2, color);
+    tft.fillRoundRect(x + 1, y + 1, fill, h - 2, (h - 2) / 2, color);
   }
 }
 
