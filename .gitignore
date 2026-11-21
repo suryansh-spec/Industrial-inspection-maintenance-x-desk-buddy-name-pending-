@@ -26,5 +26,12 @@ Thumbs.db
 # Temp
 *.tmp
 
+# Environment / secrets
+.env
+.env.*
+*.env
+**/.env
+**/.env.*
+
 # Embedded git repos / nested
 ml/signa_ fault_classification_pipeline/
