@@ -278,11 +278,3 @@ MIT License — See LICENSE file for details.
 
 ---
 
-## Acknowledgments
-
-Built with inspiration from:
-- **DeskMate** — expressive desk companion
-- **deskey-v2** — PC activity & sleep engine
-- **StatNode** — compact PC metrics dashboard
-- **yt-music-companion** — now-playing screen
-- **Hermes** — push-to-talk voice button
