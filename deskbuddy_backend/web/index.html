@@ -1286,7 +1286,12 @@ function DeviceThemeEditor() {
               onChange={e => saveDisplay({ font_face: e.target.value })}>
               {(display.fonts && display.fonts.length
                 ? display.fonts
-                : [{ id: 'pixel', label: 'Pixel (Org_01)' }, { id: 'compact', label: 'Compact (TomThumb)' }]
+                : [
+                    { id: 'pixel', label: 'Pixel (Org_01)' },
+                    { id: 'compact', label: 'Compact (TomThumb)' },
+                    { id: 'picopixel', label: 'PicoPixel (6px)' },
+                    { id: 'tiny3x3', label: 'Tiny 3×3a (3px)' },
+                  ]
               ).map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
             </select>
             <p className="text-slate-500 text-xs mt-1">Applied immediately to every TFT page.</p>

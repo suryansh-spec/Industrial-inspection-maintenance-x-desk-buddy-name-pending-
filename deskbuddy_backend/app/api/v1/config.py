@@ -223,6 +223,16 @@ async def get_theme_presets():
 # ---------------------------------------------------------------------------
 # Display: font face + wallpaper
 # ---------------------------------------------------------------------------
+VALID_FONT_FACES = ("pixel", "compact", "picopixel", "tiny3x3")
+
+FONT_LABELS = {
+    "pixel": "Pixel (Org_01)",
+    "compact": "Compact (TomThumb)",
+    "picopixel": "PicoPixel (6px)",
+    "tiny3x3": "Tiny 3×3a (3px)",
+}
+
+
 @router.get("/display")
 async def get_display():
     display = store.get("display") or {}
@@ -230,18 +240,15 @@ async def get_display():
         "font_face": display.get("font_face", "pixel"),
         "wallpaper_opacity": int(display.get("wallpaper_opacity", 150)),
         "wallpaper": ds.has_wallpaper(),
-        "fonts": [
-            {"id": "pixel", "label": "Pixel (Org_01)"},
-            {"id": "compact", "label": "Compact (TomThumb)"},
-        ],
+        "fonts": [{"id": k, "label": v} for k, v in FONT_LABELS.items()],
     }
 
 
 @router.put("/display")
 async def update_display(values: Dict[str, Any]):
     allowed = {k: v for k, v in (values or {}).items() if k in ("font_face", "wallpaper_opacity")}
-    if "font_face" in allowed and allowed["font_face"] not in ("pixel", "compact"):
-        raise HTTPException(status_code=400, detail="font_face must be 'pixel' or 'compact'")
+    if "font_face" in allowed and allowed["font_face"] not in VALID_FONT_FACES:
+        raise HTTPException(status_code=400, detail=f"font_face must be one of {VALID_FONT_FACES}")
     if "wallpaper_opacity" in allowed:
         try:
             allowed["wallpaper_opacity"] = max(0, min(255, int(allowed["wallpaper_opacity"])))

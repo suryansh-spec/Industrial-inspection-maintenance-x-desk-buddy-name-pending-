@@ -22,6 +22,8 @@
 
 #include <Fonts/Org_01.h>
 #include <Fonts/TomThumb.h>
+#include <Fonts/Picopixel.h>
+#include <Fonts/Tiny3x3a2pt7b.h>
 #include <esp_heap_caps.h>
 
 #define UI_W 128
@@ -46,14 +48,20 @@
 #define F_BIG  2
 #define F_HUGE 3
 
-// 0 = Org_01 (pixel), 1 = TomThumb (compact). Set by the `set_font` command.
+// Font face mode: 0=Org_01(pixel), 1=TomThumb(compact), 2=Picopixel, 3=Tiny3x3a
+// Set by the `set_font` command from the web panel.
 static uint8_t uiFontFaceMode = 0;
 
 static inline const GFXfont* uiFace(uint8_t id) {
   (void)id;
-  // Selected from the web panel ("Display -> Font"). Both faces share the same
-  // integer scale steps, so layout coordinates stay valid when switching.
-  return uiFontFaceMode ? &TomThumb : &Org_01;
+  // All faces use the same integer scale steps (1x, 2x, 3x), so layout
+  // coordinates remain valid when switching fonts.
+  switch (uiFontFaceMode) {
+    case 1: return &TomThumb;
+    case 2: return &Picopixel;
+    case 3: return &Tiny3x3a2pt7b;
+    default: return &Org_01;
+  }
 }
 static inline uint8_t uiScale(uint8_t id) {
   switch (id) {

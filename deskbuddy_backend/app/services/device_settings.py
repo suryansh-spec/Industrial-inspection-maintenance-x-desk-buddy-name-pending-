@@ -94,7 +94,7 @@ DEFAULTS: Dict[str, Any] = {
         "timer_size": 4,
     },
     "display": {
-        "font_face": "pixel",          # pixel (Org_01) | compact (TomThumb)
+        "font_face": "pixel",          # pixel | compact | picopixel | tiny3x3
         "wallpaper_opacity": 150,      # 0..255 scrim toward the theme background
     },
     "sleep_thresholds": {
