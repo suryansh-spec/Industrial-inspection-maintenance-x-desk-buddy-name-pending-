@@ -1,0 +1,67 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+env/
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Models
+models/
+*.pth
+*.pt
+*.onnx
+
+# Data
+data/
+*.csv
+*.json
+
+# Build
+build/
+dist/
+*.egg-info/
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+
+# Docker
+.docker/
+
+# IDE
+.vscode/
+.idea/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# OS
+Thumbs.db
+ehthumbs.db
+Desktop.ini

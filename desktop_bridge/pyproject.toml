@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "desktop-bridge"
+version = "1.0.0"
+description = "Desktop Bridge for Industrial Inspection & Desk Buddy"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi==0.115.5",
+    "uvicorn[standard]==0.32.1",
+    "pydantic==2.10.2",
+    "pydantic-settings==2.6.1",
+    "httpx==0.28.0",
+    "websockets==13.0",
+    "pyserial==3.5",
+    "psutil>=7.0.0",
+    "torch==2.5.1",
+    "torchvision==0.20.1",
+    "numpy==2.1.3",
+    "scipy==1.14.1",
+    "scikit-learn==1.5.2",
+    "joblib==1.4.2",
+    "soundfile==0.12.1",
+    "librosa==0.10.2.post1",
+    "google-auth==2.33.0",
+    "google-auth-oauthlib==1.2.1",
+    "google-auth-httplib2==0.2.0",
+    "google-api-python-client==2.142.0",
+    "openai==1.54.0",
+    "python-dotenv==1.0.1",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["desktop_bridge*"]
+
+[tool.setuptools.package-dir]
+"" = "."

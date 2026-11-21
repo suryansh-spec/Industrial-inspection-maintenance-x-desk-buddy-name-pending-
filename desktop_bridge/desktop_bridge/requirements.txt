@@ -1,0 +1,57 @@
+# Desktop Bridge Requirements
+# Install with: pip install -r requirements.txt
+
+# Core
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+pydantic==2.10.2
+pydantic-settings==2.6.1
+httpx==0.28.0
+
+# Async
+websockets==13.0
+
+# Serial
+pyserial==3.5
+
+# System monitoring
+psutil==7.2.2
+
+# ML
+torch==2.5.1
+torchvision==0.20.1
+numpy==2.1.3
+scipy==1.14.1
+scikit-learn==1.5.2
+joblib==1.4.2
+
+# Audio (for future voice features)
+soundfile==0.12.1
+librosa==0.10.2.post1
+
+# Calendar/Email
+google-auth==2.33.0
+google-auth-oauthlib==1.2.1
+google-auth-httplib2==0.2.0
+google-api-python-client==2.142.0
+
+# Voice
+openai==1.54.0
+
+# Config
+python-dotenv==1.0.1
+
+# DeskMate Desktop Companion
+pystray==0.19.4
+pillow==10.4.0
+
+# Windows-specific (optional)
+pywin32==308; sys_platform == "win32"
+
+# macOS-specific (optional)
+rumps==0.4.0; sys_platform == "darwin"
+pyobjc-framework-ScriptingBridge; sys_platform == "darwin"
+
+# Linux-specific (optional)
+# gir1.2-appindicator3-0.1; sys_platform == "linux"
+# gir1.2-gtk-3.0; sys_platform == "linux"

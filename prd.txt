@@ -1,0 +1,2142 @@
+# PRODUCT REQUIREMENTS DOCUMENT (PRD)
+# Dual-Mode AI Inspection & Desk Companion
+
+**Version:** 2.0  
+**Date:** November 2026  
+**Product Type:** Portable Embedded AI Device  
+**Primary Controller:** ESP32  
+**AI Architecture:** Cloud-based AI inference with local sensor acquisition  
+**Operating Modes:** Industrial Inspection Mode and Desk Buddy Mode  
+**Status:** Product Specification / Development Baseline
+
+---
+
+# 1. Product Overview
+
+## 1.1 Product Vision
+
+Develop a portable, intelligent, dual-purpose electronic device that combines industrial inspection capabilities with a personal desktop companion.
+
+The device will operate in two independent modes:
+
+1. **Industrial Inspection Mode:** A handheld measurement and inspection instrument capable of collecting vibration, acoustic and environmental data from physical equipment and using cloud-based AI/ML systems to identify abnormal operating patterns.
+2. **Desk Buddy Mode:** An interactive desktop companion providing music control, calendar management, notifications, PC monitoring, environmental information, productivity tools and a conversational AI assistant.
+
+Both modes will operate on the same hardware platform and share common system services.
+
+A dedicated physical button will allow instant switching between the two modes without rebooting the ESP32.
+
+The device will use the ESP32 for sensor acquisition, hardware control, display management and communication. Computationally intensive AI inference and external application integrations will run through a Python desktop bridge and cloud services.
+
+## 1.2 Core Design Philosophy
+
+The product must follow these principles:
+
+- One physical device, two distinct operating experiences.
+- No reboot required when switching modes.
+- Sensor acquisition must remain reliable even when UI and network operations are running.
+- AI inference should run in the cloud or on the connected computer rather than being forced onto the ESP32.
+- The system should remain useful when internet connectivity is unavailable.
+- Hardware and software must be modular enough to accommodate future sensors and camera integration.
+- Industrial measurements must be based on actual sensor data and validated signal-processing methods, not LLM-generated assumptions.
+- The assistant must operate through controlled tools rather than unrestricted system access.
+
+## 1.3 Product Goals
+
+| Goal | Description |
+|---|---|
+| Dual-purpose functionality | Combine inspection instrumentation and desktop assistance |
+| Portability | Operate using an internal rechargeable battery |
+| Real-time interaction | Provide responsive display, buttons and voice interaction |
+| Intelligent inspection | Analyze vibration and acoustic patterns using ML |
+| Desktop integration | Communicate with the user's Windows PC |
+| Conversational interface | Use NVIDIA Nemotron as the assistant's language-model backend |
+| Expandability | Support future camera and additional sensor modules |
+| Reliability | Maintain stable operation during mode transitions and network failures |
+
+## 1.4 Non-Goals
+
+The initial product is not intended to be:
+
+- A certified industrial vibration analyzer.
+- A calibrated sound pressure level meter.
+- A certified predictive-maintenance instrument.
+- A universal defect-detection system for every machine.
+- A fully autonomous industrial safety system.
+- A standalone device capable of running large language models locally.
+- A replacement for a full desktop computer.
+- A continuous 4K video inspection system.
+
+These capabilities may be investigated in future versions but must not be claimed without appropriate hardware, validation and datasets.
+
+---
+
+# 2. Product Architecture
+
+## 2.1 High-Level Architecture
+
+The product consists of four major layers:
+
+1. Hardware Layer
+2. Embedded Firmware Layer
+3. Desktop Bridge and Cloud Integration Layer
+4. AI/ML Processing Layer
+
+### System Architecture
+
+```text
+                  PHYSICAL DEVICE
+                ┌───────────────────┐
+                │     ESP32 MCU     │
+                │                   │
+                │  Display Manager  │
+                │  Button Manager   │
+                │  Mode Manager     │
+                │  Sensor Manager   │
+                │  Audio Manager    │
+                │  Battery Manager  │
+                └─────────┬─────────┘
+                          │
+                    Wi-Fi Network
+                          │
+                ┌─────────▼─────────┐
+                │ Python Desktop    │
+                │ Bridge            │
+                │                   │
+                │ Device API        │
+                │ Music Service     │
+                │ Calendar Service  │
+                │ Assistant Service│
+                │ PC Monitoring     │
+                │ Tool Registry     │
+                └─────────┬─────────┘
+                          │
+               ┌──────────┴───────────┐
+               │                      │
+        DESKTOP SERVICES          CLOUD SERVICES
+               │                      │
+        YouTube Music             NVIDIA Nemotron
+        Windows APIs              Speech-to-Text
+        Calendar APIs              Text-to-Speech
+        Local Storage              ML Inference APIs
+        PC Monitoring              Data Processing
+```
+
+## 2.2 Hardware Inventory
+
+### Confirmed / Selected Hardware
+
+| Component | Purpose |
+|---|---|
+| ESP32 development board | Main embedded controller |
+| ST7735 1.4-inch SPI TFT | Primary user interface |
+| MPU6050 | Orientation, motion and gesture detection |
+| ADXL345 GY-291 | Dedicated vibration measurement probe |
+| INMP441 | Digital I2S microphone |
+| MAX98357A | I2S Class-D audio amplifier |
+| 4Ω, 5W speaker | Audio output |
+| Three 18650 3000mAh cells | Proposed 3S1P battery pack |
+| LM2596 buck converter | Prototype regulated 5V power supply |
+| Five-button module | Physical navigation and input |
+
+### Optional / Planned Hardware
+
+| Component | Purpose | Status |
+|---|---|---|
+| BME280 | Temperature, humidity and atmospheric pressure | Recommended addition |
+| DS3231 RTC | Offline timekeeping | Optional |
+| INA219 | Battery voltage/current monitoring | Recommended |
+| 3S Li-ion BMS | Battery protection and balancing | Required for proposed 3S pack |
+| WS2812B LED ring | Visual status and animations | Optional |
+| Camera module / USB webcam | Visual inspection | Deferred |
+| Linux SBC | Future camera and image-processing bridge | Deferred |
+
+The device must not depend on optional components for basic operation.
+
+## 2.3 Hardware Responsibility Allocation
+
+| Hardware | Industrial Inspection | Desk Buddy |
+|---|---|---|
+| ESP32 | Sensor acquisition and inspection control | UI, connectivity and application control |
+| ST7735 TFT | Measurement interface | Dashboard and companion interface |
+| MPU6050 | Device orientation and movement | Tap/gesture detection |
+| ADXL345 | Vibration acquisition | Optional device-motion data if physically integrated |
+| INMP441 | Acoustic acquisition | Voice input |
+| MAX98357A + speaker | Optional audio feedback | Voice responses and audio |
+| BME280 | Environmental context | Environmental dashboard |
+| Battery monitoring | Power status | Battery percentage and estimated runtime |
+
+The detachable ADXL345 probe must remain independent of the device's MPU6050 motion/gesture functions.
+
+---
+
+# 3. Operating Mode Management
+
+## 3.1 Mode Definitions
+
+The system will have exactly two primary operating modes:
+
+- `INDUSTRIAL_INSPECTION`
+- `DESK_BUDDY`
+
+Each mode will have its own application logic, screen layout and background tasks.
+
+Shared drivers and services will be managed centrally.
+
+## 3.2 Physical Mode Switching
+
+A dedicated physical button will switch between operating modes.
+
+### Functional Requirements
+
+| ID | Requirement | Priority |
+|---|---|---|
+| MODE-001 | A short press must switch the active mode. | P0 |
+| MODE-002 | Mode switching must not reboot the ESP32. | P0 |
+| MODE-003 | The new mode must display its home screen after switching. | P0 |
+| MODE-004 | Wi-Fi connectivity must persist during transitions. | P0 |
+| MODE-005 | Shared peripheral drivers should remain initialized. | P0 |
+| MODE-006 | Mode-specific background tasks must be stopped or suspended safely. | P0 |
+| MODE-007 | The currently selected mode must be persisted across power cycles. | P1 |
+| MODE-008 | The device must visually indicate the active mode. | P1 |
+| MODE-009 | An active measurement must not be silently discarded. | P0 |
+
+### Mode Transition Sequence
+
+```text
+Physical Button Press
+        |
+Button Debouncing
+        |
+Enter MODE_TRANSITION
+        |
+Stop New Mode-Specific Actions
+        |
+Finish or Save Active Measurement
+        |
+Release Exclusive Audio Resources
+        |
+Stop Old Mode Tasks
+        |
+Update Active Mode
+        |
+Initialize / Resume New Mode Tasks
+        |
+Render New Home Screen
+        |
+Return to READY
+```
+
+The transition must be non-blocking wherever possible.
+
+If an inspection measurement is active, the firmware should finish the current measurement window or preserve the partial data with an explicit incomplete flag.
+
+## 3.3 Firmware State Management
+
+Operating mode and activity state must be independent.
+
+Suggested implementation:
+
+```cpp
+enum DeviceMode {
+    INDUSTRIAL_INSPECTION,
+    DESK_BUDDY
+};
+
+enum DeviceState {
+    BOOTING,
+    READY,
+    MODE_TRANSITION,
+    INSPECTION_RUNNING,
+    VOICE_LISTENING,
+    VOICE_PROCESSING,
+    PLAYBACK,
+    ERROR
+};
+```
+
+Example:
+
+```text
+Active Mode: DESK_BUDDY
+Device State: VOICE_LISTENING
+```
+
+This separation prevents unnecessary complexity when multiple activities are introduced.
+
+## 3.4 Shared Services
+
+The following services must be available independently of the active mode:
+
+- Display Manager
+- Button Manager
+- Wi-Fi Manager
+- Time Manager
+- Sensor Manager
+- Audio Manager
+- Battery Manager
+- Cloud Communication Client
+- Desktop Bridge Client
+- Mode Manager
+- Storage/Data Manager
+
+---
+
+# 4. MODE A — INDUSTRIAL INSPECTION MODE
+
+# 4.1 Overview
+
+Industrial Inspection Mode transforms the device into a portable, handheld condition-monitoring and equipment-inspection instrument.
+
+The device will collect vibration and acoustic measurements from physical equipment and combine them with environmental context.
+
+The acquired data will be processed locally for basic signal features and transmitted to a computer or cloud service for advanced analysis.
+
+The primary objective is to demonstrate an extensible AI-powered inspection platform capable of identifying deviations from normal operating behaviour.
+
+## 4.2 Primary Use Cases
+
+- Inspecting small motors.
+- Monitoring rotating equipment.
+- Detecting unusual vibration patterns.
+- Comparing healthy and abnormal operating conditions.
+- Recording machine acoustic signatures.
+- Identifying deviations from a recorded baseline.
+- Collecting environmental conditions alongside measurements.
+- Storing inspection history.
+- Generating AI-assisted inspection summaries.
+
+The first version should prioritize rotating machinery and controlled laboratory demonstrations rather than claiming universal industrial applicability.
+
+## 4.3 Inspection Workflow
+
+```text
+Enter Industrial Mode
+        |
+Select Inspection Type
+        |
+Connect / Verify Probe
+        |
+Check Sensor Status
+        |
+Select Equipment Profile
+        |
+Capture Baseline or Measurement
+        |
+Extract Signal Features
+        |
+Validate Data Quality
+        |
+Upload Measurement
+        |
+Cloud / Desktop ML Analysis
+        |
+Receive Results
+        |
+Display Inspection Report
+        |
+Save Measurement History
+```
+
+## 4.4 Inspection Types
+
+### A. Vibration Inspection
+
+**Primary sensor:** ADXL345.
+
+The ADXL345 will be used as the primary vibration acquisition sensor.
+
+The sensor will be mounted on a detachable probe designed to establish consistent mechanical contact with the equipment being inspected.
+
+#### Requirements
+
+| ID | Requirement | Priority |
+|---|---|---|
+| VIB-001 | Acquire three-axis acceleration data. | P0 |
+| VIB-002 | Support configurable sampling frequency. | P0 |
+| VIB-003 | Support configurable measurement range. | P0 |
+| VIB-004 | Capture fixed-duration measurement windows. | P0 |
+| VIB-005 | Calculate basic statistical features. | P0 |
+| VIB-006 | Calculate frequency-domain features. | P1 |
+| VIB-007 | Detect clipping and invalid measurements. | P0 |
+| VIB-008 | Associate measurements with equipment profiles. | P1 |
+| VIB-009 | Store and upload measurement records. | P0 |
+| VIB-010 | Display acquisition and sensor status. | P0 |
+
+#### Initial Configuration
+
+| Parameter | Initial Value |
+|---|---|
+| Sensor | ADXL345 |
+| Axes | X, Y, Z |
+| Initial sample rate | 1 kHz |
+| Measurement duration | 5 seconds |
+| Initial range | ±2g |
+| Communication | I2C |
+| Probe connection | Detachable four-wire connection |
+
+These values are starting configurations for prototyping, not universal measurement settings. Sampling rate, range and duration must be configurable.
+
+#### Probe Design
+
+The probe will contain:
+
+- ADXL345 breakout board.
+- Rigid mounting plate or block.
+- Four-wire cable.
+- Connector.
+- Magnetic base or mechanical mounting adapter.
+
+The sensor must be mechanically coupled to the equipment under test.
+
+The probe must not rely on hand-held positioning during actual measurements.
+
+A magnetic mounting arrangement may be used for ferromagnetic surfaces. A clamp or suitable adhesive adapter will be needed for nonmagnetic surfaces.
+
+#### Signal Processing
+
+The firmware or desktop bridge should calculate:
+
+**Time-domain features**
+- Mean.
+- Standard deviation.
+- RMS acceleration.
+- Peak acceleration.
+- Peak-to-peak amplitude.
+- Crest factor.
+- Kurtosis.
+
+**Frequency-domain features**
+- FFT.
+- Dominant frequency.
+- Spectral energy.
+- Frequency-band energy.
+- Spectral entropy.
+
+The system should retain raw measurement data where storage and transfer constraints permit.
+
+#### Interpretation
+
+The system should initially compare measurements against recorded healthy baselines.
+
+Potential abnormal patterns include:
+
+- Increased vibration amplitude.
+- Changed dominant frequency.
+- Unexpected frequency-band energy.
+- Increased impulsiveness.
+- Changes in statistical distribution.
+
+The system must not automatically label every unusual pattern as a specific mechanical fault.
+
+Fault identification requires appropriate operating context, reference data and validation.
+
+### B. Acoustic Inspection
+
+**Primary sensor:** INMP441.
+
+The INMP441 microphone will capture acoustic signatures from equipment.
+
+The purpose is comparative acoustic analysis rather than certified sound-level measurement.
+
+#### Requirements
+
+| ID | Requirement | Priority |
+|---|---|---|
+| AUD-001 | Capture digital microphone audio through I2S. | P0 |
+| AUD-002 | Support configurable recording duration. | P0 |
+| AUD-003 | Support mono audio acquisition. | P0 |
+| AUD-004 | Generate waveform and spectral representations. | P0 |
+| AUD-005 | Calculate acoustic features. | P1 |
+| AUD-006 | Upload recordings or extracted features. | P0 |
+| AUD-007 | Associate recordings with equipment profiles. | P1 |
+| AUD-008 | Prevent speaker output from contaminating measurements. | P0 |
+| AUD-009 | Validate recording quality. | P0 |
+
+#### Initial Audio Configuration
+
+| Parameter | Initial Value |
+|---|---|
+| Microphone | INMP441 |
+| Interface | I2S |
+| Sample rate | 48 kHz |
+| Channels | Mono |
+| Capture duration | 5–10 seconds |
+| Processing | FFT, PSD, spectrogram |
+
+The microphone's actual I2S slot format and ESP32 data handling must be verified during implementation.
+
+#### Acoustic Processing
+
+Potential processing features:
+
+- RMS audio amplitude.
+- Peak amplitude.
+- Frequency spectrum.
+- Power spectral density.
+- Spectrogram.
+- MFCC features.
+- Spectral centroid.
+- Spectral bandwidth.
+- Spectral roll-off.
+
+The system may use these features to compare normal and abnormal acoustic signatures.
+
+#### Limitations
+
+The INMP441 is suitable for experimental acoustic anomaly detection but is not a calibrated industrial measurement microphone.
+
+The system must not claim precise absolute dB SPL measurements without calibration.
+
+The microphone should be positioned consistently during comparisons. Ambient noise, distance, equipment load and machine speed must be considered.
+
+### C. Environmental Monitoring
+
+**Recommended sensor:** BME280.
+
+This sensor will provide environmental context for inspection measurements.
+
+#### Measurements
+
+- Ambient temperature.
+- Relative humidity.
+- Atmospheric pressure.
+
+#### Requirements
+
+| ID | Requirement | Priority |
+|---|---|---|
+| ENV-001 | Acquire environmental readings. | P1 |
+| ENV-002 | Timestamp environmental measurements. | P1 |
+| ENV-003 | Associate readings with inspection sessions. | P1 |
+| ENV-004 | Display environmental information. | P1 |
+| ENV-005 | Include environmental context in uploaded inspection records. | P1 |
+
+The sensor should be installed away from heat-producing components such as voltage regulators, amplifiers and battery electronics.
+
+The BME280 is an ambient environmental sensor, not an industrial pressure transducer or CO2 detector.
+
+## 4.5 Equipment Profiles
+
+The system should eventually support equipment profiles.
+
+A profile represents a specific machine or piece of equipment.
+
+Suggested fields:
+
+| Field | Description |
+|---|---|
+| Equipment ID | Unique identifier |
+| Equipment name | User-defined name |
+| Equipment category | Motor, fan, pump, etc. |
+| Manufacturer | Optional |
+| Rated RPM | Expected operating speed |
+| Operating load | Measurement context |
+| Installation location | User-defined |
+| Baseline reference | Previously captured healthy measurements |
+| Inspection history | Linked measurement records |
+
+The first prototype may use a simple equipment ID and equipment category. Full profile management can be implemented later.
+
+## 4.6 Inspection Data Model
+
+Each measurement should be associated with a structured record.
+
+Example:
+
+```json
+{
+  "measurement_id": "uuid",
+  "equipment_id": "motor_001",
+  "inspection_type": "vibration",
+  "timestamp": "ISO-8601",
+  "sensor": "ADXL345",
+  "sample_rate": 1000,
+  "duration_seconds": 5,
+  "range_g": 2,
+  "mounting_method": "magnetic",
+  "machine_rpm": null,
+  "environment": {
+    "temperature_c": null,
+    "humidity_percent": null,
+    "pressure_hpa": null
+  },
+  "features": {
+    "rms": null,
+    "peak": null,
+    "kurtosis": null,
+    "dominant_frequency_hz": null
+  },
+  "data_quality": "valid",
+  "analysis_status": "pending"
+}
+```
+
+Null values must remain null when information is unavailable. The system must not invent missing operating parameters.
+
+## 4.7 AI/ML Inspection Engine
+
+The inspection engine will run outside the ESP32.
+
+### Processing Architecture
+
+```text
+Sensor Data
+    |
+Data Validation
+    |
+Signal Preprocessing
+    |
+Feature Extraction
+    |
+Baseline Comparison
+    |
+ML Inference
+    |
+Anomaly Score
+    |
+Inspection Summary
+```
+
+### Initial ML Strategy
+
+The development process should begin with interpretable baseline methods.
+
+**Stage 1 — Statistical analysis**
+- Threshold-based deviation.
+- Baseline RMS comparison.
+- Frequency-spectrum comparison.
+
+**Stage 2 — Classical ML**
+- Isolation Forest.
+- Random Forest.
+- Support Vector Machine where appropriate.
+
+**Stage 3 — Deep Learning**
+- Autoencoders.
+- CNN-based spectrogram classification.
+- Temporal models when sufficient sequential data exists.
+
+The selection of models must depend on the dataset and the target inspection problem.
+
+### Analysis Output
+
+An inspection result should include:
+
+- Measurement ID.
+- Equipment ID.
+- Overall status.
+- Anomaly score, if supported.
+- Important deviations.
+- Relevant frequency components.
+- Data-quality warnings.
+- Model version.
+- Timestamp.
+- Suggested follow-up inspection.
+
+Example statuses:
+
+- Normal relative to baseline.
+- Unusual behaviour detected.
+- Measurement quality insufficient.
+- Insufficient reference data.
+- Analysis unavailable.
+
+The system must distinguish an anomaly from a confirmed mechanical fault.
+
+### Role of Nemotron in Inspection Mode
+
+Nemotron may be used to explain inspection results in natural language.
+
+For example:
+
+- Explain why a vibration measurement differs from baseline.
+- Summarize a recorded inspection.
+- Explain the meaning of RMS or kurtosis.
+- Describe potential causes of an observed frequency change.
+
+Nemotron must receive actual measurement results and model outputs.
+
+It must not independently invent sensor readings, anomaly scores or confirmed equipment diagnoses.
+
+## 4.8 Inspection Interface
+
+The Industrial Inspection interface should prioritize clarity and measurement status.
+
+### Screen 1 — Inspection Home
+
+Display:
+
+- Industrial Inspection Mode.
+- Probe connection.
+- Sensor status.
+- Battery status.
+- Wi-Fi status.
+- Last inspection result.
+- Start Inspection action.
+
+### Screen 2 — Inspection Selection
+
+Allow the user to select:
+
+- Vibration inspection.
+- Acoustic inspection.
+- Combined inspection.
+- Environmental monitoring.
+
+Combined inspection should coordinate acquisition carefully because the microphone and speaker share audio resources.
+
+### Screen 3 — Measurement Setup
+
+Display:
+
+- Equipment ID.
+- Sensor type.
+- Sampling configuration.
+- Measurement duration.
+- Probe status.
+- Environmental sensor status.
+
+### Screen 4 — Live Acquisition
+
+Display:
+
+- Recording/acquisition state.
+- Remaining time.
+- Sensor connection.
+- Basic signal level.
+- Data-quality warnings.
+
+The display must not compromise sampling reliability.
+
+### Screen 5 — Analysis
+
+Display:
+
+- Analysis progress.
+- Upload status.
+- Cloud connection.
+- Model processing status.
+
+### Screen 6 — Inspection Results
+
+Display:
+
+- Overall result.
+- Anomaly status.
+- Important measurement values.
+- Baseline comparison.
+- Data-quality warnings.
+
+Detailed plots and historical analysis should be accessible through the desktop application or a future web dashboard rather than forcing complex graphs onto the 1.4-inch TFT.
+
+## 4.9 Inspection Data Storage
+
+The system should maintain:
+
+- Measurement metadata.
+- Raw or compressed sensor data.
+- Extracted features.
+- Equipment profile.
+- Analysis results.
+- Model version.
+- Timestamp.
+
+The ESP32 may buffer a limited number of measurements locally if offline.
+
+The desktop bridge or cloud service should act as the primary long-term storage location.
+
+A measurement must not be marked as successfully uploaded until the receiving service confirms receipt.
+
+---
+
+# 5. MODE B — DESK BUDDY MODE
+
+# 5.1 Overview
+
+Desk Buddy Mode transforms the same hardware into an interactive desktop companion.
+
+It should provide useful everyday functions through a compact interface, physical controls, voice interaction and integration with the user's Windows PC.
+
+The ESP32 handles the device interface, buttons, sensors and audio peripherals.
+
+The Python desktop bridge provides access to desktop applications, calendar services, PC information and cloud AI services.
+
+## 5.2 Primary Use Cases
+
+- Viewing time and date.
+- Viewing upcoming calendar events.
+- Setting alarms and timers.
+- Controlling YouTube Music Desktop.
+- Viewing track metadata and lyrics.
+- Displaying music visualizations.
+- Monitoring PC hardware utilization.
+- Viewing environmental readings.
+- Monitoring battery status.
+- Receiving notifications.
+- Interacting with the Nemotron voice assistant.
+- Switching between operating modes.
+
+## 5.3 Desk Buddy Home Dashboard
+
+The primary screen should provide a compact overview.
+
+### Dashboard Information
+
+- Current time.
+- Date and day.
+- Upcoming calendar event.
+- Current music status.
+- Environment readings.
+- Battery level.
+- PC connection status.
+- Assistant availability.
+
+The display should prioritize frequently used information and avoid overcrowding.
+
+The 1.4-inch ST7735 is not intended to behave like a miniature smartphone.
+
+## 5.4 Clock and Time Management
+
+### Requirements
+
+| ID | Requirement | Priority |
+|---|---|---|
+| CLK-001 | Display current time. | P0 |
+| CLK-002 | Display current date. | P0 |
+| CLK-003 | Synchronize time through NTP. | P0 |
+| CLK-004 | Support configurable time format. | P1 |
+| CLK-005 | Maintain time when temporarily offline. | P0 |
+| CLK-006 | Support RTC hardware in a future revision. | P2 |
+
+The initial implementation may use ESP32 timekeeping synchronized through NTP.
+
+A DS3231 module can be added if better offline time retention is required.
+
+## 5.5 Calendar Integration
+
+Calendar functionality will be handled through the Python desktop bridge.
+
+The ESP32 should not directly implement complex OAuth authentication flows.
+
+### Features
+
+- Today's events.
+- Upcoming events.
+- Next event.
+- Event title.
+- Event time.
+- Event duration.
+- Reminder notifications.
+
+### Requirements
+
+| ID | Requirement | Priority |
+|---|---|---|
+| CAL-001 | Retrieve calendar events from the bridge. | P1 |
+| CAL-002 | Display upcoming events. | P1 |
+| CAL-003 | Display the next scheduled event. | P1 |
+| CAL-004 | Provide event reminders. | P1 |
+| CAL-005 | Allow the assistant to query calendar information. | P1 |
+| CAL-006 | Support creating reminders through approved tools. | P2 |
+
+The first release should prioritize reading and displaying events.
+
+Calendar modification should be introduced after authentication and permission handling are validated.
+
+## 5.6 Alarms, Timers and Productivity
+
+### Features
+
+- Clock alarms.
+- Countdown timers.
+- Stopwatch.
+- Pomodoro/focus timer.
+- Break reminders.
+
+### Requirements
+
+- Users must be able to configure alarms.
+- Timers must continue running during normal screen navigation.
+- Alarm notifications must be visible.
+- Audio alerts must be configurable.
+- Timer functionality should work without an internet connection.
+
+The ESP32 should manage local timer state rather than depending on the PC bridge for every countdown.
+
+## 5.7 Music Integration
+
+The device will integrate with the existing YouTube Music Desktop setup through the Python bridge.
+
+The existing local server currently operates on port `9863`.
+
+The new system should extend this integration rather than rebuild it.
+
+### Music Controls
+
+- Play.
+- Pause.
+- Next track.
+- Previous track.
+- Volume control.
+- Current track information.
+- Playback position.
+- Playback status.
+- Album artwork.
+- Lyrics.
+
+### Music Metadata
+
+The bridge should send:
+
+- Track title.
+- Artist.
+- Album, when available.
+- Duration.
+- Current playback position.
+- Playback status.
+- Album artwork thumbnail.
+- Lyrics availability.
+- Current queue information, where supported.
+
+### Lyrics
+
+The device should support displaying synchronized lyrics when a suitable source provides timing information.
+
+Requirements:
+
+- Display current lyric line.
+- Display nearby lines.
+- Highlight the current line.
+- Update based on playback position.
+- Gracefully handle unavailable or unsynchronized lyrics.
+
+The system must not assume synchronized lyrics are available for every track.
+
+### Music Visualization
+
+The device should display simple visualizations such as:
+
+- Frequency bars.
+- Waveform animation.
+- Playback progress.
+- Reactive visual patterns.
+
+Where possible, visualization data should be derived from the PC playback audio rather than the room microphone.
+
+The Python bridge can send a compact frequency-amplitude array to the ESP32.
+
+This prevents ambient noise from interfering with the visualization.
+
+## 5.8 PC Monitoring
+
+The Python desktop bridge should retrieve PC information from Windows APIs and supported hardware-monitoring interfaces.
+
+### Metrics
+
+- CPU utilization.
+- GPU utilization.
+- RAM utilization.
+- CPU temperature, where available.
+- GPU temperature.
+- GPU memory usage.
+- GPU fan speed, where supported.
+
+### Requirements
+
+| ID | Requirement | Priority |
+|---|---|---|
+| PC-001 | Retrieve CPU utilization. | P1 |
+| PC-002 | Retrieve RAM utilization. | P1 |
+| PC-003 | Retrieve GPU utilization. | P1 |
+| PC-004 | Retrieve GPU memory usage. | P1 |
+| PC-005 | Retrieve hardware temperatures where available. | P1 |
+| PC-006 | Display PC connectivity status. | P0 |
+| PC-007 | Refresh information periodically. | P1 |
+
+The bridge must gracefully handle unavailable hardware metrics.
+
+The ESP32 should receive compact numerical values rather than full desktop telemetry logs.
+
+## 5.9 Environmental Dashboard
+
+If the BME280 is installed, the Desk Buddy dashboard should display:
+
+- Ambient temperature.
+- Relative humidity.
+- Atmospheric pressure.
+
+The dashboard should also be able to provide these readings to the Nemotron assistant.
+
+Example interaction:
+
+User: "What's the room temperature?"
+
+Assistant: Retrieves the latest BME280 reading and responds with the actual measured value.
+
+The assistant must not substitute an estimate when the sensor is unavailable.
+
+## 5.10 Battery Monitoring
+
+Battery monitoring must be available in both operating modes.
+
+### Information
+
+- Battery percentage.
+- Battery voltage.
+- Current draw, when supported.
+- Charging state, when supported.
+- Estimated remaining runtime.
+
+### Requirements
+
+| ID | Requirement | Priority |
+|---|---|---|
+| BAT-001 | Monitor battery voltage. | P0 |
+| BAT-002 | Estimate battery percentage. | P1 |
+| BAT-003 | Display low-battery warnings. | P0 |
+| BAT-004 | Display charging status where available. | P1 |
+| BAT-005 | Estimate remaining runtime where sufficient data exists. | P2 |
+
+For the proposed 3S1P battery pack:
+
+- Nominal voltage: approximately 10.8–11.1V.
+- Fully charged voltage: 12.6V.
+- Capacity: 3000mAh.
+- Energy: approximately 32.4–33.3Wh, depending on nominal cell voltage.
+
+The battery percentage must not be calculated from a simplistic linear voltage mapping alone.
+
+A calibrated discharge curve and, preferably, current integration should be used.
+
+The proposed 3S battery pack requires an appropriate protection and balancing circuit and a dedicated 12.6V CC/CV charging solution.
+
+The BMS is not a battery charger.
+
+The ESP32 and peripheral electronics must receive regulated power. The battery pack must never be connected directly to 5V-rated peripherals.
+
+## 5.11 Notifications
+
+The device should display important notifications from supported desktop or cloud services.
+
+Initial notification categories:
+
+- Calendar reminders.
+- Timer completion.
+- Alarm notifications.
+- Assistant responses.
+- PC connectivity changes.
+- Battery warnings.
+- Inspection completion notifications.
+
+Notifications should be prioritized and should not unnecessarily interrupt active inspection acquisition.
+
+## 5.12 MPU6050 Gesture Interaction
+
+The MPU6050 will be used for motion and gesture detection in Desk Buddy Mode.
+
+Potential interactions:
+
+| Gesture | Proposed Action |
+|---|---|
+| Single tap | Wake display |
+| Double tap | Open music screen |
+| Triple tap | Open assistant |
+| Shake | Return to home screen |
+
+These are proposed mappings, not fixed requirements.
+
+The implementation must include debounce, thresholds, cooldown periods and false-trigger handling.
+
+The device should avoid unnecessary always-on high-frequency motion processing when operating on battery.
+
+## 5.13 Desk Buddy Interface
+
+### Screen 1 — Home Dashboard
+
+Display:
+
+- Time and date.
+- Calendar summary.
+- Music status.
+- Environment.
+- Battery.
+- PC connectivity.
+
+### Screen 2 — Music Player
+
+Display:
+
+- Album artwork.
+- Track title.
+- Artist.
+- Playback position.
+- Play/pause.
+- Previous/next controls.
+
+### Screen 3 — Lyrics
+
+Display:
+
+- Current line.
+- Previous line.
+- Upcoming line.
+- Synchronization status.
+
+### Screen 4 — PC Monitor
+
+Display:
+
+- CPU usage.
+- GPU usage.
+- RAM usage.
+- Temperatures where available.
+- Connection status.
+
+### Screen 5 — Environment and Battery
+
+Display:
+
+- Temperature.
+- Humidity.
+- Pressure.
+- Battery voltage.
+- Battery percentage.
+- Charging status.
+
+### Screen 6 — Calendar
+
+Display:
+
+- Today's date.
+- Upcoming events.
+- Next event.
+- Reminder status.
+
+### Screen 7 — Assistant
+
+Display:
+
+- Assistant availability.
+- Listening state.
+- Processing state.
+- Response text.
+- Speaking state.
+
+### Screen 8 — Settings
+
+Display:
+
+- Wi-Fi status.
+- Display brightness.
+- Time format.
+- Audio volume.
+- Gesture configuration.
+- Device information.
+
+---
+
+# 6. VOICE ASSISTANT — SHARED AI SUBSYSTEM
+
+## 6.1 Objective
+
+Implement a voice-controlled assistant using NVIDIA Nemotron as the primary language-model backend.
+
+The assistant should allow users to interact with the device naturally and execute supported actions through a controlled tool system.
+
+The assistant is a shared subsystem and may be available in both operating modes.
+
+## 6.2 AI Architecture
+
+The assistant consists of four separate components:
+
+1. Speech-to-Text.
+2. Language Model.
+3. Tool Execution.
+4. Text-to-Speech.
+
+Nemotron provides the language-model component. It does not eliminate the need for speech recognition and speech synthesis.
+
+### Pipeline
+
+```text
+             USER VOICE
+                  |
+             INMP441
+                  |
+           ESP32 I2S Capture
+                  |
+              Wi-Fi
+                  |
+         PYTHON DESKTOP BRIDGE
+                  |
+             SPEECH-TO-TEXT
+                  |
+             TEXT TRANSCRIPT
+                  |
+          NVIDIA NEMOTRON API
+                  |
+          INTENT / TOOL SELECTION
+                  |
+            TOOL REGISTRY
+                  |
+          ACTION EXECUTION
+                  |
+           RESPONSE GENERATION
+                  |
+             TEXT-TO-SPEECH
+                  |
+             AUDIO RESPONSE
+                  |
+              ESP32 I2S
+                  |
+          MAX98357A AMPLIFIER
+                  |
+                SPEAKER
+```
+
+## 6.3 Voice Activation
+
+### Initial Release: Push-to-Talk
+
+A dedicated physical button will initiate recording.
+
+Workflow:
+
+1. User presses the voice button.
+2. Device displays listening status.
+3. ESP32 captures a bounded recording.
+4. Recording stops when the button is released or the configured limit is reached.
+5. Audio is transferred to the Python bridge.
+6. STT produces a transcript.
+7. Nemotron processes the transcript.
+8. The assistant responds or requests an approved tool.
+9. TTS produces audio.
+10. ESP32 plays the response.
+
+Wake-word detection is a future enhancement.
+
+## 6.4 Assistant Capabilities
+
+### Desk Buddy Commands
+
+Examples:
+
+- "Play my music."
+- "Pause the music."
+- "Skip this track."
+- "Show me the lyrics."
+- "What's my next meeting?"
+- "Set a timer for 20 minutes."
+- "What's the temperature?"
+- "How much battery is left?"
+- "What's my GPU utilization?"
+- "Switch to industrial inspection mode."
+
+### Industrial Inspection Commands
+
+Examples:
+
+- "Start a vibration measurement."
+- "Show the latest inspection."
+- "What was the dominant frequency?"
+- "Compare this measurement with the baseline."
+- "Explain the anomaly score."
+- "Summarize this inspection."
+
+Industrial commands must invoke validated inspection workflows and retrieve actual sensor or model data.
+
+## 6.5 Tool Registry
+
+The Python bridge must expose a whitelist of supported functions.
+
+### Music Tools
+
+- `music_play`
+- `music_pause`
+- `music_next`
+- `music_previous`
+- `music_volume`
+- `music_get_status`
+- `music_get_lyrics`
+
+### Calendar Tools
+
+- `get_calendar`
+- `get_next_event`
+- `create_reminder`
+
+### Device Tools
+
+- `get_environment`
+- `get_battery`
+- `get_device_mode`
+- `device_switch_mode`
+
+### PC Tools
+
+- `get_pc_status`
+- `get_cpu_usage`
+- `get_gpu_usage`
+- `get_memory_usage`
+
+### Inspection Tools
+
+- `start_vibration_measurement`
+- `start_acoustic_measurement`
+- `get_latest_inspection`
+- `get_inspection_history`
+- `get_inspection_analysis`
+
+Each tool must have:
+
+- Defined input schema.
+- Input validation.
+- Permission checks where applicable.
+- Execution timeout.
+- Structured output.
+- Error handling.
+
+The LLM must never execute arbitrary shell commands or unrestricted Python code.
+
+Actions with meaningful consequences, such as changing or deleting user data, should require confirmation.
+
+## 6.6 Conversation Context
+
+The bridge should maintain short-term conversational context.
+
+Example:
+
+User: "What's my GPU temperature?"
+
+Assistant: "Your GPU is currently at 64°C."
+
+User: "And its utilization?"
+
+The assistant should understand that "its" refers to the GPU.
+
+Context should be bounded and managed to avoid unnecessary token usage.
+
+The assistant should not require continuous transmission of all sensor measurements.
+
+## 6.7 STT and TTS Provider Architecture
+
+STT and TTS must be independent services.
+
+The initial implementation should use provider-independent interfaces.
+
+Suggested abstractions:
+
+```python
+class SpeechToTextProvider:
+    def transcribe(self, audio):
+        pass
+
+class TextToSpeechProvider:
+    def synthesize(self, text):
+        pass
+```
+
+This allows the speech provider to change without redesigning the ESP32 firmware or Nemotron integration.
+
+The initial version should use push-to-talk recordings rather than requiring continuous live streaming.
+
+For real-time streaming speech recognition, a dedicated streaming ASR service would be needed.
+
+## 6.8 Assistant Availability
+
+The assistant must distinguish between:
+
+- Device-local functions.
+- Desktop bridge functions.
+- Cloud-dependent functions.
+
+If internet connectivity fails, the device should continue basic local functions such as clock display, timers and sensor acquisition.
+
+The device should clearly communicate when cloud AI or desktop integration is unavailable.
+
+---
+
+# 7. DESKTOP BRIDGE ARCHITECTURE
+
+## 7.1 Overview
+
+The existing Python desktop bridge should be expanded into the central integration service.
+
+It should connect the ESP32 to desktop applications and cloud services.
+
+The existing YouTube Music Desktop integration should remain functional.
+
+## 7.2 Proposed Modules
+
+| Module | Responsibility |
+|---|---|
+| `device_api.py` | ESP32 communication |
+| `assistant_service.py` | Nemotron integration and conversation management |
+| `speech_service.py` | STT and TTS |
+| `tool_registry.py` | Validated assistant tools |
+| `ytmusic_service.py` | Music control and metadata |
+| `lyrics_service.py` | Lyrics retrieval and synchronization |
+| `calendar_service.py` | Calendar integration |
+| `pc_monitor.py` | PC telemetry |
+| `inspection_service.py` | Inspection data processing and storage |
+| `data_service.py` | Measurement persistence and retrieval |
+
+These modules are logical boundaries. They may be organized differently within the existing repository.
+
+## 7.3 Communication Protocol
+
+### HTTP
+
+Use HTTP for:
+
+- Commands.
+- Measurement uploads.
+- Configuration.
+- Discrete data retrieval.
+- Assistant requests.
+
+### WebSocket
+
+Use WebSocket for:
+
+- Music status updates.
+- Playback position updates.
+- PC telemetry.
+- Assistant status updates.
+- Notifications.
+- Inspection progress.
+
+### Data Transfer
+
+- Compress larger measurement payloads.
+- Transfer album artwork as thumbnails.
+- Send only relevant lyrics lines.
+- Send compact visualizer arrays.
+- Avoid unnecessary repeated sensor uploads.
+
+## 7.4 Proposed API Endpoints
+
+The following are logical endpoint proposals, not existing implemented routes.
+
+| Endpoint | Purpose |
+|---|---|
+| `/device/status` | Device status |
+| `/device/mode` | Active mode |
+| `/device/mode/switch` | Request mode switch |
+| `/music/status` | Current playback information |
+| `/music/control` | Playback commands |
+| `/music/lyrics` | Lyrics information |
+| `/music/artwork` | Album artwork |
+| `/calendar/today` | Today's events |
+| `/calendar/next` | Next event |
+| `/pc/status` | PC telemetry |
+| `/assistant/transcribe` | Submit audio for transcription |
+| `/assistant/query` | Send transcript to Nemotron |
+| `/assistant/speak` | Request TTS |
+| `/inspection/upload` | Upload measurement |
+| `/inspection/result` | Retrieve inspection result |
+
+The final API should be versioned and documented.
+
+---
+
+# 8. USER INTERACTION AND CONTROL SYSTEM
+
+## 8.1 Physical Inputs
+
+The device should provide dedicated controls for:
+
+- Mode switching.
+- Voice activation.
+- Navigation.
+- Selection/confirmation.
+- Back/cancel.
+
+The five-button module can support navigation and interaction, subject to final GPIO allocation.
+
+## 8.2 Input Management
+
+All button events must be handled by a central input manager.
+
+Requirements:
+
+- Debouncing.
+- Short-press detection.
+- Long-press detection where required.
+- Multi-press detection only where useful.
+- Prevention of conflicting button assignments.
+- Context-sensitive navigation.
+
+The dedicated mode-switching button must remain globally accessible in both modes.
+
+## 8.3 Audio Resource Arbitration
+
+The microphone and speaker are shared resources.
+
+The system must implement exclusive ownership.
+
+Example:
+
+| Activity | Microphone | Speaker |
+|---|---|---|
+| Acoustic inspection | Inspection capture | Disabled |
+| Voice recording | Voice capture | Disabled |
+| Voice response | Disabled | TTS playback |
+| Music playback | Disabled unless separately required | Music/audio output |
+| Idle | Available | Available |
+
+The system must not allow simultaneous operations to silently corrupt audio data.
+
+---
+
+# 9. POWER MANAGEMENT
+
+## 9.1 Battery Architecture
+
+The proposed battery configuration is three compatible 18650 cells in series.
+
+This is a 3S1P configuration.
+
+| Parameter | Value |
+|---|---|
+| Number of cells | 3 |
+| Configuration | 3S1P |
+| Cell capacity | 3000mAh |
+| Nominal pack voltage | 10.8–11.1V |
+| Fully charged voltage | 12.6V |
+| Pack capacity | 3000mAh |
+| Approximate energy | 32.4–33.3Wh |
+
+Series connection increases voltage, not capacity.
+
+The three cells must be compatible in chemistry, model, capacity, age and condition.
+
+## 9.2 Power Requirements
+
+The battery subsystem must include:
+
+- Appropriate 3S BMS with balancing and protection.
+- Dedicated 12.6V CC/CV charger.
+- Fuse close to pack positive.
+- Regulated 5V supply.
+- Appropriate 3.3V regulation.
+- Battery voltage/current monitoring.
+- Physical battery protection.
+
+The BMS must not be treated as the charger.
+
+The final 5V regulator must be selected based on measured peak current and thermal performance. The prototype LM2596 module must not be assumed to provide its advertised maximum current continuously.
+
+## 9.3 Power Modes
+
+Suggested power behaviour:
+
+**Externally powered**
+- Display can remain active.
+- Normal dashboard updates.
+- Normal connectivity.
+
+**Battery powered**
+- Display brightness may be reduced.
+- Background polling should be optimized.
+- Motion-based wake can be used.
+- Network updates should be rate-limited where practical.
+
+**Low battery**
+- Display warning.
+- Reduce nonessential activity.
+- Preserve active measurements.
+- Avoid abrupt shutdown where possible.
+
+## 9.4 Runtime Measurement
+
+Battery runtime must be determined through actual power measurements.
+
+The system should not display a precise remaining runtime until a sufficiently reliable estimation method is implemented.
+
+---
+
+# 10. SOFTWARE ARCHITECTURE
+
+## 10.1 ESP32 Firmware Structure
+
+Suggested project structure:
+
+```text
+firmware/
+│
+├── main.cpp
+│
+├── core/
+│   ├── mode_manager.cpp
+│   ├── state_manager.cpp
+│   ├── task_manager.cpp
+│   └── config_manager.cpp
+│
+├── hardware/
+│   ├── display_driver.cpp
+│   ├── button_driver.cpp
+│   ├── mpu6050_driver.cpp
+│   ├── adxl345_driver.cpp
+│   ├── inmp441_driver.cpp
+│   ├── max98357a_driver.cpp
+│   └── battery_monitor.cpp
+│
+├── services/
+│   ├── wifi_manager.cpp
+│   ├── time_manager.cpp
+│   ├── audio_manager.cpp
+│   ├── sensor_manager.cpp
+│   ├── storage_manager.cpp
+│   └── network_client.cpp
+│
+├── modes/
+│   ├── industrial/
+│   │   ├── inspection_app.cpp
+│   │   ├── vibration_service.cpp
+│   │   ├── acoustic_service.cpp
+│   │   └── inspection_ui.cpp
+│   │
+│   └── desk_buddy/
+│       ├── desk_buddy_app.cpp
+│       ├── music_ui.cpp
+│       ├── calendar_ui.cpp
+│       ├── assistant_ui.cpp
+│       └── dashboard_ui.cpp
+│
+└── utils/
+    ├── signal_processing.cpp
+    └── data_format.cpp
+```
+
+The final structure may be adjusted to the chosen framework and existing codebase.
+
+## 10.2 Task Management
+
+The firmware should use separate tasks or equivalent non-blocking scheduling for:
+
+- Sensor acquisition.
+- Display updates.
+- Button input.
+- Network communication.
+- Audio capture/playback.
+- Mode management.
+
+High-priority sensor acquisition must not be blocked by:
+
+- Screen animations.
+- Cloud requests.
+- Music metadata updates.
+- Assistant processing.
+- Calendar synchronization.
+
+The implementation should use bounded queues and explicit error handling.
+
+## 10.3 Memory Management
+
+The firmware must account for ESP32 RAM limitations.
+
+Requirements:
+
+- Avoid repeatedly allocating large audio buffers.
+- Use fixed-size buffers where practical.
+- Stream or chunk large transfers.
+- Keep display assets compact.
+- Avoid holding unnecessary raw audio data in memory.
+- Ensure network and UI operations do not exhaust heap memory.
+
+---
+
+# 11. DATA MANAGEMENT AND CLOUD ARCHITECTURE
+
+## 11.1 Data Categories
+
+The system will handle:
+
+1. Device configuration.
+2. Sensor measurements.
+3. Inspection results.
+4. Battery and environmental telemetry.
+5. Music metadata.
+6. Calendar information.
+7. PC telemetry.
+8. Assistant conversations.
+
+## 11.2 Storage Responsibilities
+
+| Data | Primary Storage |
+|---|---|
+| Device configuration | ESP32 non-volatile storage |
+| Current mode | ESP32 non-volatile storage |
+| Timers and alarms | ESP32 local storage |
+| Sensor measurement buffer | ESP32 temporary storage |
+| Long-term inspection records | Desktop/cloud storage |
+| Assistant conversation context | Python bridge |
+| Music metadata | Desktop bridge |
+| Calendar data | Calendar provider / bridge |
+| PC telemetry | Desktop bridge |
+
+## 11.3 Offline Behaviour
+
+The device should preserve useful local functionality without internet access.
+
+### Available Offline
+
+- Mode switching.
+- Clock display, after time synchronization.
+- Timers and alarms.
+- Local sensor acquisition.
+- Basic vibration feature extraction.
+- Local display.
+- Battery monitoring.
+- Previously stored measurement information.
+
+### Requires Desktop Bridge
+
+- YouTube Music Desktop integration.
+- PC monitoring.
+- Desktop calendar integration.
+- Desktop-connected assistant functionality.
+
+### Requires Cloud Connectivity
+
+- Nemotron inference.
+- Cloud STT/TTS providers.
+- Remote ML inference, if selected.
+
+The device should clearly indicate unavailable services rather than appearing frozen.
+
+---
+
+# 12. SECURITY AND PRIVACY
+
+## 12.1 API Security
+
+- Nemotron API credentials must remain on the Python bridge or secure backend.
+- API keys must never be hardcoded in ESP32 firmware.
+- Credentials must not be displayed in logs or device screens.
+- Tool execution must be restricted to registered functions.
+- API requests must use configurable timeouts and error handling.
+
+## 12.2 Device Communication
+
+The device and bridge should use authenticated communication where practical.
+
+If the system is initially limited to a trusted local network, that assumption must be documented.
+
+Remote access must not be exposed without appropriate authentication and transport security.
+
+## 12.3 Audio Privacy
+
+- The initial assistant should use push-to-talk.
+- Audio should not be continuously uploaded in the background.
+- Recording should be visibly indicated.
+- Audio should be deleted or retained according to a defined policy.
+- The user should be able to disable voice functionality.
+
+## 12.4 Calendar and Personal Data
+
+Calendar information must be retrieved only when required.
+
+The device should display limited relevant information rather than continuously copying full calendar records.
+
+---
+
+# 13. ERROR HANDLING AND RECOVERY
+
+| Scenario | Expected Behaviour |
+|---|---|
+| Wi-Fi disconnects | Preserve mode and continue local functionality |
+| Desktop bridge unavailable | Disable desktop-dependent features gracefully |
+| Nemotron unavailable | Show assistant error and preserve other functions |
+| STT failure | Allow voice recording retry |
+| TTS failure | Display text response if available |
+| Sensor disconnected | Display sensor error and prevent invalid measurement |
+| Probe disconnected during acquisition | Mark measurement invalid or incomplete |
+| Measurement upload fails | Retain measurement for retry |
+| Battery critically low | Warn user and safely stop nonessential operations |
+| Mode switch during acquisition | Preserve partial data |
+| Audio resource conflict | Reject or safely sequence conflicting activity |
+| Invalid assistant tool call | Reject action and return structured error |
+| ESP32 memory shortage | Stop nonessential work and recover safely where possible |
+
+---
+
+# 14. PERFORMANCE REQUIREMENTS
+
+These are initial engineering targets and must be validated on the actual hardware.
+
+| Area | Target |
+|---|---|
+| Mode switching | Perceived as immediate; target under 500ms for ordinary transitions |
+| Button response | Under 100ms for local input acknowledgement |
+| Display responsiveness | No visible freezing during network requests |
+| Vibration acquisition | Sustain configured sampling rate without unexplained sample loss |
+| Audio acquisition | Sustain configured sample rate without buffer overruns |
+| Local timers | Continue operating without network |
+| Assistant response | Stream or display progress while cloud processing occurs |
+| Measurement upload | Confirm receipt before marking upload successful |
+| Recovery | External service failures must not reboot the device |
+
+Assistant latency depends on STT, network, Nemotron and TTS provider performance. No fixed end-to-end response time should be guaranteed before benchmarking.
+
+---
+
+# 15. TESTING AND VALIDATION
+
+## 15.1 Hardware Validation
+
+- Verify all sensor connections.
+- Verify I2C device addresses.
+- Verify I2S microphone capture.
+- Verify amplifier and speaker output.
+- Verify display operation.
+- Verify button input.
+- Verify battery voltage regulation.
+- Verify thermal behaviour under peak load.
+- Verify that audio output does not contaminate acoustic measurements.
+
+## 15.2 Mode Switching Validation
+
+Test:
+
+1. Desk Buddy to Industrial Inspection.
+2. Industrial Inspection to Desk Buddy.
+3. Switching while idle.
+4. Switching during music playback.
+5. Switching during voice interaction.
+6. Switching during active vibration measurement.
+7. Switching during network disconnection.
+
+Confirm that no reboot occurs and data remains valid.
+
+## 15.3 Vibration Testing
+
+Use a small, guarded, low-voltage motor.
+
+Capture:
+
+- Healthy baseline.
+- Controlled imbalance.
+- Changed operating speed.
+- Different mounting conditions.
+
+Compare:
+
+- RMS.
+- Peak.
+- Crest factor.
+- Kurtosis.
+- Dominant frequency.
+- Frequency-band energy.
+
+Do not create unsafe rotor imbalance or conduct uncontrolled tests on mains-powered machinery.
+
+## 15.4 Acoustic Testing
+
+Capture:
+
+- Quiet ambient baseline.
+- Normal motor operation.
+- Controlled changes in operating condition.
+- Different microphone distances.
+- Different ambient noise conditions.
+
+Verify that recordings are consistent enough for comparative analysis.
+
+## 15.5 Voice Assistant Testing
+
+Test:
+
+- Clear speech.
+- Background noise.
+- Short commands.
+- Multi-turn conversations.
+- Invalid requests.
+- Unsupported commands.
+- API timeout.
+- Network disconnection.
+- Tool execution failure.
+- TTS failure.
+
+Verify that the assistant never executes arbitrary code.
+
+## 15.6 Desktop Integration Testing
+
+Test:
+
+- Music play/pause.
+- Track switching.
+- Volume changes.
+- Playback metadata.
+- Lyrics availability.
+- Calendar retrieval.
+- PC monitoring.
+- Bridge disconnection and reconnection.
+
+---
+
+# 16. DEVELOPMENT ROADMAP
+
+## Phase 1 — Core Firmware Foundation
+
+**Objective:** Establish the operating system of the device.
+
+Deliverables:
+- ESP32 firmware baseline.
+- Display driver.
+- Button manager.
+- Shared hardware drivers.
+- Wi-Fi manager.
+- State manager.
+- Mode manager.
+
+Exit criteria:
+- Device boots reliably.
+- Both mode interfaces exist.
+- Physical mode switching works without rebooting.
+
+## Phase 2 — Industrial Inspection MVP
+
+**Objective:** Acquire and analyze real sensor data.
+
+Deliverables:
+- ADXL345 probe integration.
+- INMP441 acoustic acquisition.
+- Basic environmental integration if BME280 is installed.
+- Measurement configuration.
+- Data validation.
+- Feature extraction.
+- Local measurement buffering.
+
+Exit criteria:
+- Valid vibration measurements.
+- Valid acoustic recordings.
+- Reliable measurement metadata.
+- No major acquisition interruption from UI activity.
+
+## Phase 3 — Inspection Analysis
+
+**Objective:** Introduce the analysis pipeline.
+
+Deliverables:
+- Python inspection service.
+- Measurement upload.
+- Baseline comparison.
+- Feature extraction.
+- Initial anomaly detection.
+- Structured inspection results.
+
+Exit criteria:
+- Measurements can be stored and retrieved.
+- Healthy and controlled abnormal conditions can be compared.
+- Data-quality warnings are visible.
+
+## Phase 4 — Desk Buddy MVP
+
+**Objective:** Build the desktop companion experience.
+
+Deliverables:
+- Home dashboard.
+- Clock and date.
+- Timers and alarms.
+- Music integration.
+- PC monitoring.
+- Calendar retrieval.
+- Environment and battery screens.
+
+Exit criteria:
+- Core desktop functions operate through the bridge.
+- Local functions continue without internet.
+- UI remains responsive.
+
+## Phase 5 — Nemotron Voice Assistant
+
+**Objective:** Enable conversational device control.
+
+Deliverables:
+- Push-to-talk recording.
+- STT integration.
+- Nemotron integration.
+- Conversation context.
+- Tool registry.
+- TTS integration.
+- Speaker playback.
+
+Exit criteria:
+- User can issue voice commands.
+- Assistant can retrieve real device data.
+- Assistant can execute approved actions.
+- Errors are handled without rebooting the device.
+
+## Phase 6 — Refinement and Optimization
+
+**Objective:** Improve the overall experience.
+
+Deliverables:
+- Gesture interactions.
+- Better UI animations.
+- Improved audio handling.
+- Assistant response streaming.
+- Better offline handling.
+- Battery optimization.
+- Long-duration reliability testing.
+
+## Phase 7 — Future Expansion
+
+Potential additions:
+- Linux SBC camera bridge.
+- USB camera integration.
+- Visual inspection pipeline.
+- Image-based defect detection.
+- Advanced inspection models.
+- Historical equipment analytics.
+- More sophisticated anomaly detection.
+
+These features are explicitly outside the initial implementation scope.
+
+---
+
+# 17. ACCEPTANCE CRITERIA
+
+The product's first complete release will be accepted when the following conditions are met.
+
+## Core System
+
+- [ ] ESP32 boots and initializes the shared hardware.
+- [ ] Two operating modes are available.
+- [ ] Physical mode button switches modes without reboot.
+- [ ] Mode switching preserves active measurement data.
+- [ ] Shared services remain operational during transitions.
+- [ ] Network failures do not crash the device.
+
+## Industrial Inspection Mode
+
+- [ ] ADXL345 acquires three-axis vibration data.
+- [ ] INMP441 captures acoustic recordings.
+- [ ] Sampling configuration is adjustable.
+- [ ] Measurement quality is validated.
+- [ ] Basic time-domain features are calculated.
+- [ ] Frequency-domain analysis is available.
+- [ ] Measurements can be associated with equipment IDs.
+- [ ] Measurements can be uploaded and stored.
+- [ ] Baseline comparisons can be performed.
+- [ ] Results include model/data-quality context.
+- [ ] The system does not present anomalies as confirmed diagnoses.
+
+## Desk Buddy Mode
+
+- [ ] Clock and date are displayed.
+- [ ] Timers and alarms work locally.
+- [ ] YouTube Music Desktop can be controlled.
+- [ ] Track information is displayed.
+- [ ] Lyrics display works when data is available.
+- [ ] Music visualization works with bridge-provided data.
+- [ ] PC monitoring data is displayed where available.
+- [ ] Calendar events can be retrieved.
+- [ ] Environment information is displayed when the sensor is installed.
+- [ ] Battery information is available.
+
+## Voice Assistant
+
+- [ ] Push-to-talk recording works.
+- [ ] STT produces a usable transcript.
+- [ ] Nemotron processes the request.
+- [ ] The assistant supports approved tool execution.
+- [ ] TTS produces an audio response.
+- [ ] The speaker plays the response.
+- [ ] Multi-turn context works.
+- [ ] Invalid tool calls are rejected.
+- [ ] API credentials are not exposed in firmware.
+- [ ] Cloud failures do not crash the device.
+
+---
+
+# 18. RISKS AND TECHNICAL CONSTRAINTS
+
+| Risk | Impact | Mitigation |
+|---|---|---|
+| ESP32 RAM limitations | Audio and network buffer failures | Fixed buffers, chunking and careful memory management |
+| I2C noise or cable length | Unreliable external probe readings | Short cable initially; consider local probe MCU and differential communication for longer cables |
+| Sensor mounting inconsistency | Misleading vibration comparisons | Standardized mounting and equipment context |
+| Ambient acoustic noise | Reduced anomaly detection quality | Controlled microphone positioning and quality checks |
+| Shared audio peripherals | Conflicting audio operations | Central audio resource manager |
+| Cloud latency | Slow assistant responses | Progress UI and streaming where supported |
+| Internet dependency | Loss of cloud functionality | Preserve local features |
+| Battery estimation errors | Incorrect runtime display | Calibration and current integration |
+| Poor training data | Unreliable anomaly detection | Controlled datasets and baseline validation |
+| Small TFT | Limited UI space | Simple screens and compact visualizations |
+| API/provider changes | Integration maintenance | Provider-independent service interfaces |
+
+---
+
+# 19. FUTURE EXPANSION — CAMERA-BASED VISUAL INSPECTION
+
+Visual inspection is not part of the initial hardware implementation.
+
+However, the architecture must allow a future camera subsystem to be added without redesigning the two-mode firmware.
+
+## 19.1 Proposed Architecture
+
+```text
+USB / CSI CAMERA
+       |
+LINUX SBC
+       |
+IMAGE CAPTURE
+       |
+IMAGE VALIDATION
+       |
+WI-FI / NETWORK
+       |
+PYTHON OR CLOUD INSPECTION SERVICE
+       |
+IMAGE PREPROCESSING
+       |
+OBJECT DETECTION / ANOMALY DETECTION
+       |
+INSPECTION RESULT
+       |
+ESP32 DISPLAY
+```
+
+## 19.2 Potential Applications
+
+- Surface defect detection.
+- Component identification.
+- Visual condition comparison.
+- Object detection.
+- Missing-part detection.
+- Reference-image comparison.
+
+## 19.3 Architectural Requirements
+
+- Camera integration must be modular.
+- The Linux SBC should manage camera acquisition.
+- The ESP32 should remain responsible for device control and display.
+- Images should be transferred through a defined API.
+- Image-processing models should run on the SBC, PC or cloud.
+- Camera failures must not affect vibration or acoustic acquisition.
+
+The SBC and camera hardware must be selected and validated separately before implementation.
+
+---
+
+# 20. FINAL PRODUCT DEFINITION
+
+The final product is a portable embedded AI platform with two primary operating experiences.
+
+**Industrial Inspection Mode** provides sensor-based equipment monitoring, vibration and acoustic data acquisition, environmental context, anomaly detection and AI-assisted inspection summaries.
+
+**Desk Buddy Mode** provides a compact desktop companion with music control, calendar, alarms, PC monitoring, environmental information, notifications and conversational voice interaction.
+
+The ESP32 acts as the central hardware controller. The Python desktop bridge connects the device to desktop applications and cloud services. NVIDIA Nemotron acts as the language-model backend for the voice assistant. Dedicated ML and signal-processing pipelines remain responsible for inspection analysis.
+
+The architecture must remain modular, support non-rebooting mode transitions and allow future camera-based inspection capabilities.
+
+**The defining product principle: one physical device, two independent modes, one shared hardware platform, and a modular cloud-connected intelligence layer.**
+
+---
+
+**End of Product Requirements Document — Version 2.0**

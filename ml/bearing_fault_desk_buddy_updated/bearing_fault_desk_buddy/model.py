@@ -1,0 +1,33 @@
+import torch.nn as nn
+
+class CNNModel(nn.Module):
+    """1D CNN for fixed-length vibration windows of 1200 samples."""
+    def __init__(self, num_classes=4):
+        super().__init__()
+        self.encoder = nn.Sequential(
+            nn.Conv1d(1, 16, 3, padding=1),
+            nn.BatchNorm1d(16),
+            nn.ReLU(),
+            nn.MaxPool1d(2),
+            nn.Conv1d(16, 32, 3, padding=1),
+            nn.BatchNorm1d(32),
+            nn.ReLU(),
+            nn.MaxPool1d(2),
+            nn.Conv1d(32, 64, 3, padding=1),
+            nn.BatchNorm1d(64),
+            nn.ReLU(),
+            nn.MaxPool1d(2),
+            nn.Flatten()
+        )
+        self.predictor = nn.Sequential(
+            nn.Linear(150 * 64, 1000),
+            nn.BatchNorm1d(1000),
+            nn.ReLU(),
+            nn.Linear(1000, 100),
+            nn.BatchNorm1d(100),
+            nn.ReLU(),
+            nn.Linear(100, num_classes)
+        )
+
+    def forward(self, x):
+        return self.predictor(self.encoder(x))

@@ -1,0 +1,129 @@
+version: '3.8'
+
+services:
+  # Backend API
+  backend:
+    build: 
+      context: ./deskbuddy_backend
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - DATABASE_URL=postgresql://postgres:[YOUR-DATABASE-PASSWORD]@db.fibjpcssiyqxcihoprkf.supabase.co:5432/postgres
+      - REDIS_URL=redis://redis:6379/0
+      - BACKEND_URL=http://backend:8000
+      - SERIAL_PORT=/dev/ttyUSB0
+      - NVIDIA_API_KEY=${NVIDIA_API_KEY}
+      - GOOGLE_CREDENTIALS_PATH=/app/credentials/google-calendar.json
+      - GOOGLE_TOKEN_PATH=/app/credentials/google-token.json
+    depends_on:
+      - db
+      - redis
+    volumes:
+      - ./deskbuddy_backend:/app
+      - ./ml:/ml
+      - ./models:/models
+    command: python -m app.main
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # Desktop Bridge
+  desktop-bridge:
+    build: 
+      context: ./desktop_bridge
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - BACKEND_URL=http://backend:8000
+      - SERIAL_PORT=/dev/ttyUSB0
+      - NVIDIA_API_KEY=${NVIDIA_API_KEY}
+    devices:
+      - "/dev/ttyUSB0:/dev/ttyUSB0"
+    volumes:
+      - ./desktop_bridge:/app
+      - ./ml:/ml
+    depends_on:
+      - backend
+    command: python run.py --host 0.0.0.0 --port 8080
+
+  # Database
+  db:
+    image: postgres:16
+    environment:
+      - POSTGRES_DB=deskbuddy
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ML Training (run on demand)
+  ml-train:
+    build: 
+      context: ./ml/signal_fault_classification_pipeline/signal-fault-classification
+      dockerfile: Dockerfile
+    volumes:
+      - ./ml:/ml
+      - ./models:/models
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    command: python train_pipeline.py --epochs 50
+    profiles:
+      - training
+
+  # Monitoring (optional)
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+    profiles:
+      - monitoring
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - ./monitoring/grafana:/etc/grafana/provisioning
+    profiles:
+      - monitoring
+
+volumes:
+  postgres_data:
+  redis_data:

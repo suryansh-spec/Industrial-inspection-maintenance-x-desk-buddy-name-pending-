@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+.pytest_cache/
+
+# Logs
+*.log
+deskbuddy_backend/logs/
+
+# Large datasets / models (optional - keep models if small)
+ml/datasets/cwru_raw/
+*.mat
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Arduino build artifacts
+*.bin
+*.elf
+*.map
+
+# Temp
+*.tmp

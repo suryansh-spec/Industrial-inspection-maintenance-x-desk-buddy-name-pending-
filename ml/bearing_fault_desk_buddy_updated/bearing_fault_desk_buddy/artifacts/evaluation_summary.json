@@ -1,0 +1,12 @@
+{
+  "test_accuracy": 100.0,
+  "best_epoch": 50,
+  "class_names": [
+    "Normal",
+    "Inner Race",
+    "Ball",
+    "Outer Race"
+  ],
+  "window_size": 1200,
+  "sample_rate_hz": 12000
+}

@@ -1,0 +1,23 @@
+name: inspection
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  # core training stack (conda build — pre-compiled, faster)
+  - numpy=2.1.*
+  - scipy=1.14.*
+  - scikit-learn=1.5.*
+  - matplotlib=3.9.*
+  - tqdm=4.67.*
+  - pandas=2.2.*
+  - joblib=1.4.*
+  - jupyterlab=4.3.*
+  # audio (conda-forge versions are reliable)
+  - pysoundfile=0.12.*
+  - librosa=0.10.*
+  # pip-only deps (installed last)
+  - pip
+  - pip:
+      - torch==2.5.1
+      - torchvision==0.20.1

@@ -1,0 +1,1071 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DeskBuddy Control Panel</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script>
+tailwind.config = {
+  darkMode: 'class',
+  theme: { extend: { colors: { accent: '#06b6d4' } } }
+}
+</script>
+<style>
+body { background: #0f172a; color: #e2e8f0; font-family: 'Segoe UI', system-ui, sans-serif; }
+.card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 16px; }
+.btn { padding: 8px 16px; border-radius: 8px; font-weight: 500; cursor: pointer; transition: all 0.15s; }
+.btn-primary { background: #06b6d4; color: #0f172a; }
+.btn-primary:hover { background: #22d3ee; }
+.btn-secondary { background: #334155; color: #e2e8f0; }
+.btn-secondary:hover { background: #475569; }
+.btn-danger { background: #ef4444; color: white; }
+.tab-active { border-bottom: 2px solid #06b6d4; color: #06b6d4; }
+.mono { font-family: 'Consolas', 'Courier New', monospace; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+const API = "http://127.0.0.1:8080/api/v1";
+const WS_URL = "ws://127.0.0.1:8080/ws";
+
+// ─── API helpers ───────────────────────────────────────────
+async function api(path, opts = {}) {
+  const res = await fetch(API + path, { headers: { "Content-Type": "application/json" }, ...opts });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+// ─── WebSocket hook ────────────────────────────────────────
+function useWebSocket(onMessage) {
+  const wsRef = useRef(null);
+  const cbRef = useRef(onMessage);
+  cbRef.current = onMessage;
+  useEffect(() => {
+    const ws = new WebSocket(WS_URL);
+    ws.onmessage = (e) => {
+      try { const d = JSON.parse(e.data); cbRef.current(d); } catch {}
+    };
+    ws.onclose = () => setTimeout(() => { wsRef.current = new WebSocket(WS_URL); }, 3000);
+    wsRef.current = ws;
+    return () => ws.close();
+  }, []);
+}
+
+// ─── Metric Card ───────────────────────────────────────────
+function MetricCard({ label, value, unit, color, max }) {
+  const pct = max ? Math.min(100, (value / max) * 100) : null;
+  return (
+    <div className="card">
+      <div className="text-xs text-slate-400 mb-1">{label}</div>
+      <div className="text-2xl font-bold" style={{ color: color || '#e2e8f0' }}>
+        {value !== null && value !== undefined ? (typeof value === 'number' ? value.toFixed(1) : value) : '--'}
+        <span className="text-sm text-slate-500 ml-1">{unit}</span>
+      </div>
+      {pct !== null && (
+        <div className="mt-2 h-2 bg-slate-700 rounded-full overflow-hidden">
+          <div className="h-full rounded-full transition-all duration-500" style={{ width: pct + '%', background: color || '#06b6d4' }}></div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Dashboard ─────────────────────────────────────────────
+function Dashboard({ state, metrics }) {
+  const m = metrics || {};
+  const s = state || {};
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <MetricCard label="CPU" value={m.cpu_percent} unit="%" color={m.cpu_percent > 80 ? '#ef4444' : m.cpu_percent > 55 ? '#f59e0b' : '#22c55e'} max={100} />
+        <MetricCard label="RAM" value={m.memory_percent} unit="%" color={m.memory_percent > 85 ? '#ef4444' : m.memory_percent > 65 ? '#f59e0b' : '#22c55e'} max={100} />
+        <MetricCard label="GPU" value={m.gpu_percent} unit="%" color={m.gpu_percent > 80 ? '#ef4444' : m.gpu_percent > 55 ? '#f59e0b' : '#22c55e'} max={100} />
+        <MetricCard label="VRAM" value={m.gpu_memory_percent} unit="%" color={m.gpu_memory_percent > 90 ? '#ef4444' : '#06b6d4'} max={100} />
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <MetricCard label="CPU Temp" value={m.cpu_temp_c} unit="°C" color="#f97316" />
+        <MetricCard label="GPU Temp" value={m.gpu_temp_c} unit="°C" color="#f97316" />
+        <MetricCard label="Thermal Zone" value={m.thermal_zone_c} unit="°C" color="#a78bfa" />
+        <MetricCard label="GPU Fan" value={m.gpu_fan_percent} unit="%" color="#06b6d4" max={100} />
+      </div>
+      <div className="card">
+        <div className="text-sm font-semibold mb-2">Device Status</div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+          <div>Online: <span className={s.dev_online ? 'text-green-400' : 'text-red-400'}>{s.dev_online ? 'Yes' : 'No'}</span></div>
+          <div>Battery: {s.batt_v ? s.batt_v.toFixed(2) + 'V' : '--'} ({s.batt >= 0 ? s.batt + '%' : 'N/A'})</div>
+          <div>Mic: {s.mic >= 0 ? s.mic + '/100' : 'offline'}</div>
+          <div>Env: {s.env_t > -900 ? s.env_t.toFixed(1) + '°C' : '--'}</div>
+        </div>
+      </div>
+      <div className="card relative overflow-hidden">
+        {s.m_art && (
+          <div
+            className="absolute inset-0 bg-cover bg-center opacity-25 pointer-events-none transition-all duration-700"
+            style={{
+              backgroundImage: `url(${s.m_art})`,
+              filter: 'blur(30px) brightness(0.7)',
+              transform: 'scale(1.2)',
+            }}
+          />
+        )}
+        <div className="relative z-10 flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
+          <div className="flex items-center gap-4">
+            {s.m_art ? (
+              <img src={s.m_art} alt="Cover" className="w-16 h-16 rounded-lg object-cover shadow-lg border border-slate-700/60" />
+            ) : (
+              <div className="w-16 h-16 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-2xl text-cyan-400 shadow">
+                ♪
+              </div>
+            )}
+            <div>
+              <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-0.5">Now Playing</div>
+              <div className="text-lg font-bold text-cyan-400 leading-tight">{s.m_title || 'Nothing playing'}</div>
+              <div className="text-slate-300 text-sm">{s.m_artist || 'Start music on PC or YouTube Music'}</div>
+              {s.m_dur > 0 && (
+                <div className="text-xs text-slate-400 mt-1">
+                  {Math.floor(s.m_prog / 60)}:{('0' + (s.m_prog % 60)).slice(-2)} / {Math.floor(s.m_dur / 60)}:{('0' + (s.m_dur % 60)).slice(-2)}
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button className="btn btn-secondary text-xs" onClick={async () => { try { await api('/desktop/music/previous', {method:'POST'}); setTimeout(refreshState, 500); } catch(e) { alert('Error: ' + e.message); } }}>Prev</button>
+            <button className="btn btn-primary text-xs" onClick={async () => { try { if (s.m_play) { await api('/desktop/music/pause', {method:'POST'}); setState(prev => ({...prev, m_play: 0})); } else { await api('/desktop/music/play', {method:'POST'}); setState(prev => ({...prev, m_play: 1})); } setTimeout(refreshState, 500); } catch(e) { alert('Error: ' + e.message); } }}>{s.m_play ? 'Pause' : 'Play'}</button>
+            <button className="btn btn-secondary text-xs" onClick={async () => { try { await api('/desktop/music/next', {method:'POST'}); setTimeout(refreshState, 500); } catch(e) { alert('Error: ' + e.message); } }}>Next</button>
+          </div>
+        </div>
+        {s.lyr_ok && (
+          <div className="relative z-10 mt-4 pt-3 border-t border-slate-700/50">
+            <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
+              <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${s.lyr_sync ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
+                {s.lyr_sync ? 'SYNCED' : 'UNSYNCED'}
+              </span>
+              {s.lyr_tot > 0 && <span>{s.lyr_idx + 1} / {s.lyr_tot}</span>}
+            </div>
+            <div className="text-center space-y-1.5 py-1">
+              {s.lyr_prev && <div className="text-xs text-slate-400 opacity-60 transition-all">{s.lyr_prev}</div>}
+              <div className="text-base font-bold text-cyan-300 drop-shadow-md py-1 transition-all scale-105">{s.lyr_cur || '...'}</div>
+              {s.lyr_next && <div className="text-xs text-slate-400 opacity-60 transition-all">{s.lyr_next}</div>}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Expressions ───────────────────────────────────────────
+const EXPRESSIONS = ["relaxed","happy","sad","angry","sleepy","thinking","curious","excited","surprised","confused","laughing","music","typing","coding","browsing","gaming","watching","sleeping","deep_sleep","autonomous"];
+const ACTIVITIES = ["idle","coding","browsing","music","gaming","watching","typing","thinking","gaming"];
+
+function Expressions() {
+  const [mappings, setMappings] = useState([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    api('/config/expressions').then(d => { setMappings(d.mappings || []); setLoading(false); }).catch(() => setLoading(false));
+  }, []);
+  const saveMappings = async () => {
+    try {
+      const rows = document.querySelectorAll('tbody tr');
+      const mappings = [];
+      rows.forEach(row => {
+        const act = row.querySelector('td:first-child').textContent;
+        const sel = row.querySelector('select');
+        if (act && sel) mappings.push({activity: act, expression: sel.value});
+      });
+      await api('/config/expressions', {method:'PUT', body: JSON.stringify(mappings)});
+      alert('Expression mappings saved!');
+    } catch(e) { alert('Error: ' + e.message); }
+  };
+  return (
+    <div className="space-y-4">
+      <h2 className="text-xl font-bold">Expression Mappings</h2>
+      <p className="text-slate-400 text-sm">Map PC activities to OLED face expressions.</p>
+      <div className="card">
+        <table className="w-full text-sm">
+          <thead><tr className="text-slate-400"><th className="text-left py-2">Activity</th><th className="text-left py-2">Expression</th><th className="text-left py-2">Actions</th></tr></thead>
+          <tbody>
+            {ACTIVITIES.map(act => (
+              <tr key={act} className="border-t border-slate-700">
+                <td className="py-2 font-mono">{act}</td>
+                <td className="py-2">
+                  <select className="bg-slate-700 rounded px-2 py-1" defaultValue="relaxed">
+                    {EXPRESSIONS.map(e => <option key={e} value={e}>{e}</option>)}
+                  </select>
+                </td>
+                <td className="py-2">
+                  <button className="btn btn-secondary text-xs" onClick={(e) => {
+                    const row = e.target.closest('tr');
+                    const sel = row.querySelector('select');
+                    const expr = sel ? sel.value : 'happy';
+                    api('/companion/emotion', {method:'POST', body: JSON.stringify({expression: expr, duration_seconds: 5})}).then(() => alert('Expression "' + expr + '" sent for 5s')).catch(err => alert('Error: ' + err.message));
+                  }}>Test</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <button className="btn btn-primary" onClick={saveMappings}>Save Mappings</button>
+      <div className="card">
+        <h3 className="font-semibold mb-2">Sleep Thresholds (seconds)</h3>
+        <div className="grid grid-cols-3 gap-3 text-sm">
+          <div><label className="text-slate-400">Sleepy</label><input type="number" className="bg-slate-700 rounded px-2 py-1 w-full" defaultValue={30} /></div>
+          <div><label className="text-slate-400">Sleeping</label><input type="number" className="bg-slate-700 rounded px-2 py-1 w-full" defaultValue={120} /></div>
+          <div><label className="text-slate-400">Deep Sleep</label><input type="number" className="bg-slate-700 rounded px-2 py-1 w-full" defaultValue={300} /></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Button Mappings ──────────────────────────────────────
+const BUTTONS = ["mode", "voice", "up", "down", "select"];
+const PAGES = ["home", "music", "lyrics", "pc", "env", "notifications", "pomodoro"];
+const ACTIONS = ["next_page", "prev_page", "play_pause", "volume_up", "volume_down", "toggle_mode", "voice_request", "none"];
+
+function ButtonMappings() {
+  return (
+    <div className="space-y-4">
+      <h2 className="text-xl font-bold">Button Mappings</h2>
+      <p className="text-slate-400 text-sm">Configure what each button does on each page.</p>
+      <div className="card overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead><tr className="text-slate-400">
+            <th className="text-left py-2">Button</th>
+            {PAGES.map(p => <th key={p} className="text-left py-2 px-2">{p}</th>)}
+          </tr></thead>
+          <tbody>
+            {BUTTONS.map(btn => (
+              <tr key={btn} className="border-t border-slate-700">
+                <td className="py-2 font-mono font-bold">{btn}</td>
+                {PAGES.map(p => (
+                  <td key={p} className="py-2 px-2">
+                    <select className="bg-slate-700 rounded px-1 py-1 text-xs">
+                      {ACTIONS.map(a => <option key={a} value={a}>{a}</option>)}
+                    </select>
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <button className="btn btn-primary" onClick={saveMappings}>Save Mappings</button>
+      <div className="card">
+        <h3 className="font-semibold mb-2">Gesture Config</h3>
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          <label className="flex items-center gap-2"><input type="checkbox" defaultChecked /> Single tap → Wake</label>
+          <label className="flex items-center gap-2"><input type="checkbox" defaultChecked /> Double tap → Music</label>
+          <label className="flex items-center gap-2"><input type="checkbox" defaultChecked /> Triple tap → Voice</label>
+          <label className="flex items-center gap-2"><input type="checkbox" defaultChecked /> Shake → Home</label>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Notifications ────────────────────────────────────────
+function Notifications() {
+  const [notifs, setNotifs] = useState([]);
+  useEffect(() => {
+    api('/desktop/notifications?limit=50').then(d => setNotifs(d.notifications || [])).catch(() => {});
+  }, []);
+  return (
+    <div className="space-y-4">
+      <h2 className="text-xl font-bold">Notifications</h2>
+      <div className="card">
+        <h3 className="font-semibold mb-2">Notification Rules</h3>
+        <p className="text-slate-400 text-sm mb-3">IF condition THEN send notification</p>
+        <div className="space-y-2">
+          <div className="flex gap-2 items-center text-sm">
+            <span className="text-cyan-400">IF</span> CPU &gt; <input className="bg-slate-700 rounded px-2 py-1 w-16" defaultValue={80} />%
+            <span className="text-cyan-400">THEN</span> notify "High CPU" priority
+            <select className="bg-slate-700 rounded px-2 py-1"><option>high</option><option>normal</option><option>urgent</option></select>
+            <button className="btn btn-secondary text-xs" onClick={() => alert('Rule added (placeholder - backend endpoint coming soon)')}>Add Rule</button>
+          </div>
+          <div className="flex gap-2 items-center text-sm">
+            <span className="text-cyan-400">IF</span> GPU temp &gt; <input className="bg-slate-700 rounded px-2 py-1 w-16" defaultValue={80} />°C
+            <span className="text-cyan-400">THEN</span> notify "GPU Hot" priority
+            <select className="bg-slate-700 rounded px-2 py-1"><option>high</option><option>normal</option><option>urgent</option></select>
+            <button className="btn btn-secondary text-xs" onClick={() => alert('Rule added (placeholder - backend endpoint coming soon)')}>Add Rule</button>
+          </div>
+        </div>
+      </div>
+      <div className="card">
+        <h3 className="font-semibold mb-2">History</h3>
+        <div className="space-y-2 max-h-64 overflow-y-auto">
+          {notifs.length === 0 && <p className="text-slate-500 text-sm">No notifications yet.</p>}
+          {notifs.map((n, i) => (
+            <div key={i} className="flex justify-between items-center text-sm border-b border-slate-700 py-2">
+              <div>
+                <div className="font-semibold">{n.title || 'Notification'}</div>
+                <div className="text-slate-400 text-xs">{n.message}</div>
+              </div>
+              <span className={`text-xs px-2 py-1 rounded ${n.priority === 'urgent' ? 'bg-red-500/20 text-red-400' : n.priority === 'high' ? 'bg-amber-500/20 text-amber-400' : 'bg-slate-500/20 text-slate-400'}`}>{n.priority || 'normal'}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Sensor Graphs ────────────────────────────────────────
+function SensorGraphs() {
+  const chartRef = useRef(null);
+  const chartInstance = useRef(null);
+  const [range, setRange] = useState('1h');
+  const [metrics, setMetrics] = useState([]);
+
+  useEffect(() => {
+    api('/system/metrics?limit=60').then(d => setMetrics(d.metrics || d || [])).catch(() => {});
+  }, [range]);
+
+  useEffect(() => {
+    if (!chartRef.current) return;
+    if (chartInstance.current) chartInstance.current.destroy();
+    const ctx = chartRef.current.getContext('2d');
+    const labels = metrics.map((_, i) => i);
+    chartInstance.current = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          { label: 'CPU %', data: metrics.map(m => m.cpu_percent), borderColor: '#22c55e', tension: 0.3, pointRadius: 0 },
+          { label: 'RAM %', data: metrics.map(m => m.memory_percent), borderColor: '#06b6d4', tension: 0.3, pointRadius: 0 },
+          { label: 'GPU %', data: metrics.map(m => m.gpu_percent), borderColor: '#a78bfa', tension: 0.3, pointRadius: 0 },
+        ]
+      },
+      options: { responsive: true, plugins: { legend: { labels: { color: '#94a3b8' } } }, scales: { x: { display: false }, y: { min: 0, max: 100, ticks: { color: '#94a3b8' }, grid: { color: '#1e293b' } } } }
+    });
+    return () => { if (chartInstance.current) chartInstance.current.destroy(); };
+  }, [metrics]);
+
+  return (
+    <div className="space-y-4">
+      <h2 className="text-xl font-bold">Sensor Graphs & Historical Metrics</h2>
+      <div className="flex gap-2 mb-2">
+        {['1h','6h','24h','7d'].map(r => <button key={r} className={`btn text-xs ${range===r?'btn-primary':'btn-secondary'}`} onClick={() => setRange(r)}>{r}</button>)}
+      </div>
+      <div className="card"><canvas ref={chartRef} height="200"></canvas></div>
+      <div className="card">
+        <h3 className="font-semibold mb-2">Device Sensor History</h3>
+        <p className="text-slate-400 text-sm">Temperature, humidity, pressure, mic level over time.</p>
+      </div>
+    </div>
+  );
+}
+
+// ─── Inspection Models & Prognostics ─────────────────────────────
+function InspectionModels() {
+  const [prog, setProg] = useState(null);
+  const [selectedMotor, setSelectedMotor] = useState('motor_1');
+
+  useEffect(() => {
+    api(`/inspect/prognostics/${selectedMotor}`).then(d => setProg(d)).catch(() => {});
+  }, [selectedMotor]);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <h2 className="text-xl font-bold">Industrial Inspection & Predictive Prognostics</h2>
+        <select
+          className="bg-slate-700 text-xs rounded px-3 py-1.5 border border-slate-600 text-cyan-300 font-semibold"
+          value={selectedMotor}
+          onChange={e => setSelectedMotor(e.target.value)}
+        >
+          <option value="motor_1">Motor 1: Main Water Pump</option>
+          <option value="motor_2">Motor 2: Air Compressor</option>
+        </select>
+      </div>
+
+      {prog && (
+        <div className="card border border-cyan-500/30 bg-slate-800/90 shadow-xl space-y-4">
+          <div className="flex justify-between items-start">
+            <div>
+              <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold">Equipment Health & Timeline</div>
+              <div className="text-lg font-bold text-white mt-0.5">{prog.name} ({prog.motor_id})</div>
+              <div className="text-xs text-slate-300 mt-1">
+                <span className="font-semibold text-cyan-400">Equipment Age:</span> {prog.operational_age?.summary}
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-xs text-slate-400">Health Index</div>
+              <div className="text-2xl font-bold" style={{ color: prog.prognostics?.health_index_pct > 75 ? '#22c55e' : prog.prognostics?.health_index_pct > 40 ? '#f59e0b' : '#ef4444' }}>
+                {prog.prognostics?.health_index_pct}%
+              </div>
+              <div className="text-[10px] text-slate-400 uppercase tracking-wider">{prog.vibration_metrics?.wear_stage}</div>
+            </div>
+          </div>
+
+          <div className="bg-slate-900/80 p-4 rounded-xl border border-slate-700/60">
+            <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1">Predictive Breakdown Forecast</div>
+            <div className="text-2xl font-black text-amber-400 tracking-wide">
+              {prog.prognostics?.timeline_forecast}
+            </div>
+            <div className="text-xs text-slate-300 mt-1">
+              Estimated Date of Breakdown: <span className="font-semibold text-white">{prog.prognostics?.projected_failure_date}</span> (±{prog.prognostics?.confidence_margin_days} days)
+            </div>
+            <div className="text-xs text-cyan-400/90 mt-2 p-2 bg-slate-800 rounded border border-cyan-900/40">
+              <span className="font-bold uppercase text-[10px] text-slate-400 block mb-0.5">Recommended Action</span>
+              {prog.prognostics?.action_recommendation}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+            <div className="p-2 bg-slate-700/40 rounded">
+              <div className="text-slate-400">Current Vibration</div>
+              <div className="font-bold text-sm text-cyan-300">{prog.vibration_metrics?.current_rms_mm_s} mm/s</div>
+            </div>
+            <div className="p-2 bg-slate-700/40 rounded">
+              <div className="text-slate-400">ISO 10816 Zone</div>
+              <div className="font-bold text-sm text-white">{prog.vibration_metrics?.iso_10816_zone}</div>
+            </div>
+            <div className="p-2 bg-slate-700/40 rounded">
+              <div className="text-slate-400">Diagnosis</div>
+              <div className="font-bold text-sm text-green-400">{prog.vibration_metrics?.diagnosis}</div>
+            </div>
+            <div className="p-2 bg-slate-700/40 rounded">
+              <div className="text-slate-400">Confidence</div>
+              <div className="font-bold text-sm text-white">{prog.vibration_metrics?.confidence}%</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="card">
+        <h3 className="font-semibold mb-2">Active Classification Model</h3>
+        <div className="text-sm text-slate-400">1D-CNN trained on CWRU Bearing Dataset — 4 classes: Normal, Inner Race, Ball, Outer Race</div>
+        <div className="text-sm text-slate-400">Window: 1200 samples @ 12000 Hz | Test accuracy: 100%</div>
+        <div className="text-sm text-green-400 mt-1">Status: Loaded & active</div>
+      </div>
+      <div className="card">
+        <h3 className="font-semibold mb-2">Upload New Model</h3>
+        <input type="file" accept=".pth,.pt,.onnx" className="text-sm" id="modelFile" />
+        <button className="btn btn-secondary text-xs mt-2" onClick={async () => {
+          const file = document.getElementById('modelFile').files[0];
+          if (!file) { alert('Select a file first'); return; }
+          const fd = new FormData(); fd.append('file', file);
+          try { await fetch(API + '/inspect/vibration', {method:'POST', body: JSON.stringify({device_id:'test', x:[1,2,3], y:[1,2,3], z:[1,2,3], sample_rate_hz:1000, method:'traditional', duration_seconds:1}), headers:{'Content-Type':'application/json'}}); alert('Upload not yet implemented - use models/ folder'); } catch(e) { alert('Error: ' + e.message); }
+        }}>Upload</button>
+      </div>
+      <div className="card">
+        <h3 className="font-semibold mb-2">Test Analysis</h3>
+        <textarea className="bg-slate-700 rounded p-2 w-full text-xs mono" rows={4} placeholder="Paste vibration data (JSON array)..." />
+        <button className="btn btn-primary text-xs mt-2" onClick={async () => {
+          try {
+            const r = await api('/inspect/vibration', {method:'POST', body: JSON.stringify({device_id:'test', x:[0.1,0.2,0.15,0.12,0.18]*100, y:[0.05,0.08,0.06,0.07,0.09]*100, z:[9.8,9.81,9.79,9.82,9.78]*100, sample_rate_hz:1000, method:'cnn', duration_seconds:5})});
+            alert('Result: ' + r.predicted_class + ' (confidence: ' + (r.confidence*100).toFixed(1) + '%)');
+          } catch(e) { alert('Error: ' + e.message); }
+        }}>Run Analysis</button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Gaming Mode ──────────────────────────────────────────
+function GamingMode() {
+  const [status, setStatus] = useState(null);
+  const [config, setConfig] = useState({ enabled: false, auto_detect: true, gpu_threshold: 30, cpu_threshold: 25, sustained_seconds: 10, fullscreen_detection: true, gpu_temp_threshold: 80, cpu_temp_threshold: 85, vram_threshold: 90, game_library: [] });
+  const [newGame, setNewGame] = useState('');
+
+  useEffect(() => {
+    api('/gaming/status').then(d => { setStatus(d); if (d.config) setConfig(c => ({...c, ...d.config})); }).catch(() => {});
+  }, []);
+
+  const toggleEnabled = () => {
+    const newState = !config.enabled;
+    setConfig(c => ({...c, enabled: newState}));
+    api(newState ? '/gaming/enable' : '/gaming/disable', {method:'POST'}).catch(() => {});
+  };
+
+  const addGame = () => {
+    if (!newGame.trim()) return;
+    api('/gaming/library/add', {method:'POST', body: JSON.stringify({games: [newGame.trim()]})}).then(d => {
+      setConfig(c => ({...c, game_library: d.library || []}));
+      setNewGame('');
+    }).catch(() => {});
+  };
+
+  const removeGame = (g) => {
+    api('/gaming/library/remove', {method:'POST', body: JSON.stringify({games: [g]})}).then(d => {
+      setConfig(c => ({...c, game_library: d.library || []}));
+    }).catch(() => {});
+  };
+
+  return (
+    <div className="space-y-4">
+      <h2 className="text-xl font-bold">Gaming Mode</h2>
+      <div className="card flex items-center justify-between">
+        <div>
+          <div className="font-semibold">Gaming Mode</div>
+          <div className="text-sm text-slate-400">Auto-detect games, track sessions, monitor temps</div>
+        </div>
+        <button className={`btn ${config.enabled ? 'btn-primary' : 'btn-secondary'}`} onClick={toggleEnabled}>
+          {config.enabled ? 'ON' : 'OFF'}
+        </button>
+      </div>
+
+      {status && status.active && status.session && (
+        <div className="card border-green-500/30">
+          <div className="flex justify-between items-center">
+            <div>
+              <div className="text-lg font-bold text-green-400">{status.session.game_name}</div>
+              <div className="text-sm text-slate-400">Session active</div>
+            </div>
+            <div className="text-2xl font-bold mono">{status.session.started_at ? new Date(status.session.started_at).toLocaleTimeString() : '--'}</div>
+          </div>
+          {status.session.current_stats && (
+            <div className="grid grid-cols-3 gap-2 mt-3 text-sm">
+              <div>GPU: {status.session.current_stats.gpu_percent?.toFixed(0)}%</div>
+              <div>CPU: {status.session.current_stats.cpu_percent?.toFixed(0)}%</div>
+              <div>VRAM: {status.session.current_stats.vram_percent?.toFixed(0)}%</div>
+              <div>GPU Temp: {status.session.current_stats.gpu_temp?.toFixed(0)}°C</div>
+              <div>CPU Temp: {status.session.current_stats.cpu_temp?.toFixed(0)}°C</div>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="card">
+        <h3 className="font-semibold mb-2">Detection Settings</h3>
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          <label className="flex items-center gap-2"><input type="checkbox" checked={config.auto_detect} onChange={e => setConfig(c=>({...c, auto_detect: e.target.checked}))} /> Auto-detect games</label>
+          <label className="flex items-center gap-2"><input type="checkbox" checked={config.fullscreen_detection} onChange={e => setConfig(c=>({...c, fullscreen_detection: e.target.checked}))} /> Fullscreen detection</label>
+          <div><label className="text-slate-400">GPU threshold %</label><input type="number" className="bg-slate-700 rounded px-2 py-1 w-full" value={config.gpu_threshold} onChange={e => setConfig(c=>({...c, gpu_threshold: +e.target.value}))} /></div>
+          <div><label className="text-slate-400">CPU threshold %</label><input type="number" className="bg-slate-700 rounded px-2 py-1 w-full" value={config.cpu_threshold} onChange={e => setConfig(c=>({...c, cpu_threshold: +e.target.value}))} /></div>
+          <div><label className="text-slate-400">Sustained (seconds)</label><input type="number" className="bg-slate-700 rounded px-2 py-1 w-full" value={config.sustained_seconds} onChange={e => setConfig(c=>({...c, sustained_seconds: +e.target.value}))} /></div>
+        </div>
+        <button className="btn btn-primary text-xs mt-3" onClick={() => api('/gaming/config', {method:'POST', body: JSON.stringify(config)})}>Save Config</button>
+      </div>
+
+      <div className="card">
+        <h3 className="font-semibold mb-2">Game Library (manual)</h3>
+        <p className="text-slate-400 text-sm mb-2">Add game .exe names for instant detection (pirated games included).</p>
+        <div className="flex gap-2 mb-3">
+          <input className="bg-slate-700 rounded px-2 py-1 flex-1 text-sm" placeholder="e.g. eldenring.exe" value={newGame} onChange={e => setNewGame(e.target.value)} onKeyDown={e => e.key === 'Enter' && addGame()} />
+          <button className="btn btn-primary text-xs" onClick={addGame}>Add</button>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {(config.game_library || []).map(g => (
+            <span key={g} className="bg-slate-700 rounded px-2 py-1 text-xs flex items-center gap-1">
+              {g} <button onClick={() => removeGame(g)} className="text-red-400 hover:text-red-300">×</button>
+            </span>
+          ))}
+          {(config.game_library || []).length === 0 && <span className="text-slate-500 text-sm">No games added yet.</span>}
+        </div>
+      </div>
+
+      <div className="card">
+        <h3 className="font-semibold mb-2">Alert Thresholds</h3>
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          <div><label className="text-slate-400">GPU Temp (°C)</label><input type="number" className="bg-slate-700 rounded px-2 py-1 w-full" value={config.gpu_temp_threshold} onChange={e => setConfig(c=>({...c, gpu_temp_threshold: +e.target.value}))} /></div>
+          <div><label className="text-slate-400">CPU Temp (°C)</label><input type="number" className="bg-slate-700 rounded px-2 py-1 w-full" value={config.cpu_temp_threshold} onChange={e => setConfig(c=>({...c, cpu_temp_threshold: +e.target.value}))} /></div>
+          <div><label className="text-slate-400">VRAM (%)</label><input type="number" className="bg-slate-700 rounded px-2 py-1 w-full" value={config.vram_threshold} onChange={e => setConfig(c=>({...c, vram_threshold: +e.target.value}))} /></div>
+        </div>
+        <button className="btn btn-primary text-xs mt-3" onClick={() => api('/gaming/alerts', {method:'PUT', body: JSON.stringify({gpu_temp_threshold: config.gpu_temp_threshold, cpu_temp_threshold: config.cpu_temp_threshold, vram_threshold: config.vram_threshold})})}>Save Alerts</button>
+      </div>
+
+      {status && status.alerts && status.alerts.length > 0 && (
+        <div className="card">
+          <h3 className="font-semibold mb-2">Recent Alerts</h3>
+          <div className="space-y-1 text-sm">
+            {status.alerts.map((a, i) => (
+              <div key={i} className="text-amber-400">{a.type}: {a.value?.toFixed(1)} (threshold: {a.threshold})</div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Theme Editor ─────────────────────────────────────────
+function ThemeEditor() {
+  const [theme, setTheme] = useState(null);
+  const [presets, setPresets] = useState([]);
+  const [wallpaperPreview, setWallpaperPreview] = useState('');
+
+  useEffect(() => {
+    api('/config/theme').then(d => setTheme(d)).catch(() => {});
+    api('/config/theme/presets').then(d => setPresets(d.presets || [])).catch(() => {});
+  }, []);
+
+  const applyPreset = (preset) => {
+    const newTheme = {
+      ...theme,
+      preset: preset.id,
+      accent_color: preset.accent,
+      background: preset.bg,
+      card_bg: preset.card,
+      text_color: preset.text,
+    };
+    setTheme(newTheme);
+    window.applyTheme(newTheme);
+    api('/config/theme', {method:'PUT', body: JSON.stringify(newTheme)}).then(() => {}).catch(e => alert('Error: ' + e.message));
+  };
+
+  const updateField = (key, value) => {
+    setTheme(prev => {
+      const updated = {...prev, [key]: value};
+      window.applyTheme(updated);
+      return updated;
+    });
+  };
+
+  const saveTheme = () => {
+    window.applyTheme(theme);
+    api('/config/theme', {method:'PUT', body: JSON.stringify(theme)}).then(() => alert('Theme saved!')).catch(e => alert('Error: ' + e.message));
+  };
+
+  const handleWallpaper = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setWallpaperPreview(ev.target.result);
+      updateField('wallpaper', ev.target.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  if (!theme) return <div className="text-slate-400">Loading theme...</div>;
+
+  return (
+    <div className="space-y-4">
+      <h2 className="text-xl font-bold">Visual Theme Editor</h2>
+      <p className="text-slate-400 text-sm">Customize color schemes, wallpapers, and text sizes.</p>
+
+      <div className="card">
+        <h3 className="font-semibold mb-3">Color Presets</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          {presets.map(p => (
+            <button key={p.id} onClick={() => applyPreset(p)}
+              className={`p-3 rounded-lg border-2 text-left transition-all ${theme.preset === p.id ? 'border-cyan-400' : 'border-slate-600 hover:border-slate-400'}`}
+              style={{ background: p.bg, color: p.text }}>
+              <div className="font-bold text-sm">{p.name}</div>
+              <div className="flex gap-1 mt-1">
+                <div className="w-4 h-4 rounded" style={{ background: p.accent }}></div>
+                <div className="w-4 h-4 rounded" style={{ background: p.card }}></div>
+                <div className="w-4 h-4 rounded" style={{ background: p.bg }}></div>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="card">
+        <h3 className="font-semibold mb-3">Custom Colors</h3>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+          <div><label className="text-slate-400 block mb-1">Accent Color</label><input type="color" value={theme.accent_color} onChange={e => updateField('accent_color', e.target.value)} className="w-full h-8 rounded cursor-pointer" /></div>
+          <div><label className="text-slate-400 block mb-1">Background</label><input type="color" value={theme.background} onChange={e => updateField('background', e.target.value)} className="w-full h-8 rounded cursor-pointer" /></div>
+          <div><label className="text-slate-400 block mb-1">Card Background</label><input type="color" value={theme.card_bg} onChange={e => updateField('card_bg', e.target.value)} className="w-full h-8 rounded cursor-pointer" /></div>
+          <div><label className="text-slate-400 block mb-1">Text Color</label><input type="color" value={theme.text_color} onChange={e => updateField('text_color', e.target.value)} className="w-full h-8 rounded cursor-pointer" /></div>
+          <div><label className="text-slate-400 block mb-1">Secondary Text</label><input type="color" value={theme.text_secondary} onChange={e => updateField('text_secondary', e.target.value)} className="w-full h-8 rounded cursor-pointer" /></div>
+          <div><label className="text-slate-400 block mb-1">Border Color</label><input type="color" value={theme.border_color} onChange={e => updateField('border_color', e.target.value)} className="w-full h-8 rounded cursor-pointer" /></div>
+        </div>
+      </div>
+
+      <div className="card">
+        <h3 className="font-semibold mb-3">Wallpaper</h3>
+        <div className="flex gap-3 items-start">
+          <div className="flex-1">
+            <input type="file" accept="image/*" onChange={handleWallpaper} className="text-sm" />
+            <div className="mt-2 text-sm text-slate-400">Upload a background image (PNG/JPG). Leave empty for solid color.</div>
+            <div className="mt-2">
+              <label className="text-slate-400 text-sm">Opacity: {Math.round((theme.wallpaper_opacity || 0.3) * 100)}%</label>
+              <input type="range" min="0" max="1" step="0.05" value={theme.wallpaper_opacity || 0.3} onChange={e => updateField('wallpaper_opacity', parseFloat(e.target.value))} className="w-full" />
+            </div>
+          </div>
+          {wallpaperPreview && (
+            <div className="w-32 h-20 rounded border border-slate-600 overflow-hidden">
+              <img src={wallpaperPreview} alt="preview" className="w-full h-full object-cover" />
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="card">
+        <h3 className="font-semibold mb-3">Typography & Layout</h3>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+          <div>
+            <label className="text-slate-400 block mb-1">Font Size</label>
+            <select className="bg-slate-700 rounded px-2 py-1 w-full" value={theme.font_size} onChange={e => updateField('font_size', e.target.value)}>
+              <option value="small">Small</option>
+              <option value="medium">Medium</option>
+              <option value="large">Large</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-slate-400 block mb-1">Card Style</label>
+            <select className="bg-slate-700 rounded px-2 py-1 w-full" value={theme.card_style} onChange={e => updateField('card_style', e.target.value)}>
+              <option value="solid">Solid</option>
+              <option value="glass">Glass (blur)</option>
+              <option value="bordered">Bordered</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-slate-400 block mb-1">Border Radius</label>
+            <input type="number" className="bg-slate-700 rounded px-2 py-1 w-full" value={theme.border_radius} onChange={e => updateField('border_radius', parseInt(e.target.value))} />
+          </div>
+          <div>
+            <label className="text-slate-400 block mb-1">Sidebar Position</label>
+            <select className="bg-slate-700 rounded px-2 py-1 w-full" value={theme.sidebar_position} onChange={e => updateField('sidebar_position', e.target.value)}>
+              <option value="left">Left</option>
+              <option value="right">Right</option>
+              <option value="top">Top (horizontal)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div className="card">
+        <h3 className="font-semibold mb-2">Live Preview</h3>
+        <div className="p-4 rounded-lg" style={{ background: theme.background, color: theme.text_color, border: '1px solid ' + theme.border_color }}>
+          <div className="text-lg font-bold" style={{ color: theme.accent_color }}>Accent Text</div>
+          <div style={{ background: theme.card_bg, padding: '8px', borderRadius: theme.border_radius + 'px', marginTop: '8px' }}>
+            <div style={{ color: theme.text_color }}>Card content text</div>
+            <div style={{ color: theme.text_secondary, fontSize: '0.875rem' }}>Secondary text</div>
+          </div>
+        </div>
+      </div>
+
+      <button className="btn btn-primary" onClick={saveTheme}>Save Theme</button>
+    </div>
+  );
+}
+
+// ─── Device Theme Editor ──────────────────────────────────
+function DeviceThemeEditor() {
+  const [theme, setTheme] = useState(null);
+  const [presets] = useState([
+    {id:'default', name:'Default', bg:'#000000', text:'#FFFFFF', accent:'#07FF', secondary:'#8410', warning:'#FD20', success:'#07E0', danger:'#F800', headerBg:'#0010'},
+    {id:'dark-blue', name:'Dark Blue', bg:'#000010', text:'#FFFFFF', accent:'#00BFFF', secondary:'#404060', warning:'#FF8C00', success:'#00FF7F', danger:'#FF4500', headerBg:'#000030'},
+    {id:'green', name:'Matrix', bg:'#000000', text:'#00FF00', accent:'#00FF00', secondary:'#004000', warning:'#FFFF00', success:'#00FF00', danger:'#FF0000', headerBg:'#001000'},
+    {id:'amber', name:'Amber', bg:'#0a0800', text:'#FFB000', accent:'#FFB000', secondary:'#403000', warning:'#FF6600', success:'#FFB000', danger:'#FF0000', headerBg:'#1a1400'},
+    {id:'white', name:'White', bg:'#FFFFFF', text:'#000000', accent:'#0000FF', secondary:'#808080', warning:'#FF8800', success:'#008800', danger:'#FF0000', headerBg:'#DDDDDD'},
+  ]);
+
+  useEffect(() => {
+    api('/config/device-theme').then(d => setTheme(d)).catch(() => {});
+  }, []);
+
+  const applyPreset = (p) => {
+    const newTheme = {...theme, bg_color: p.bg, text_color: p.text, accent_color: p.accent, secondary_color: p.secondary, warning_color: p.warning, success_color: p.success, danger_color: p.danger, header_bg: p.headerBg};
+    setTheme(newTheme);
+    api('/config/device-theme', {method:'PUT', body: JSON.stringify(newTheme)}).then(() => alert('Theme applied: ' + p.name)).catch(e => alert('Error: ' + e.message));
+  };
+
+  const updateField = (key, value) => {
+    setTheme(prev => ({...prev, [key]: value}));
+  };
+
+  const saveTheme = () => {
+    api('/config/device-theme', {method:'PUT', body: JSON.stringify(theme)}).then(() => alert('Device theme saved & pushed!')).catch(e => alert('Error: ' + e.message));
+  };
+
+  if (!theme) return <div className="text-slate-400">Loading...</div>;
+
+  return (
+    <div className="space-y-4">
+      <h2 className="text-xl font-bold">Device Display Theme (TFT)</h2>
+      <p className="text-slate-400 text-sm">Configure colors for the ESP32 TFT display. Changes are pushed to the device immediately.</p>
+      <div className="card">
+        <h3 className="font-semibold mb-3">Color Presets</h3>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+          {presets.map(p => (
+            <button key={p.id} onClick={() => applyPreset(p)}
+              className="p-3 rounded-lg border-2 text-left transition-all border-slate-600 hover:border-slate-400"
+              style={{ background: p.bg, color: p.text }}>
+              <div className="font-bold text-sm">{p.name}</div>
+              <div className="flex gap-1 mt-1">
+                <div className="w-4 h-4 rounded" style={{ background: p.accent }}></div>
+                <div className="w-4 h-4 rounded" style={{ background: p.secondary }}></div>
+                <div className="w-4 h-4 rounded" style={{ background: p.bg, border: '1px solid ' + p.text }}></div>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="card">
+        <h3 className="font-semibold mb-3">Custom Colors (hex)</h3>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+          {['bg_color','text_color','accent_color','secondary_color','warning_color','success_color','danger_color','header_bg','header_text'].map(key => (
+            <div key={key}>
+              <label className="text-slate-400 block mb-1">{key.replace('_',' ')}</label>
+              <div className="flex gap-2">
+                <input type="color" value={theme[key]} onChange={e => updateField(key, e.target.value)} className="w-10 h-8 rounded cursor-pointer" />
+                <input type="text" value={theme[key]} onChange={e => updateField(key, e.target.value)} className="bg-slate-700 rounded px-2 py-1 flex-1 text-xs mono" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="card">
+        <h3 className="font-semibold mb-2">Text Sizes</h3>
+        <div className="grid grid-cols-4 gap-3 text-sm">
+          <div><label className="text-slate-400">Title</label><input type="number" min="1" max="4" className="bg-slate-700 rounded px-2 py-1 w-full" value={theme.title_size} onChange={e => updateField('title_size', parseInt(e.target.value))} /></div>
+          <div><label className="text-slate-400">Body</label><input type="number" min="1" max="4" className="bg-slate-700 rounded px-2 py-1 w-full" value={theme.body_size} onChange={e => updateField('body_size', parseInt(e.target.value))} /></div>
+          <div><label className="text-slate-400">Big</label><input type="number" min="1" max="4" className="bg-slate-700 rounded px-2 py-1 w-full" value={theme.big_size} onChange={e => updateField('big_size', parseInt(e.target.value))} /></div>
+          <div><label className="text-slate-400">Timer</label><input type="number" min="1" max="4" className="bg-slate-700 rounded px-2 py-1 w-full" value={theme.timer_size} onChange={e => updateField('timer_size', parseInt(e.target.value))} /></div>
+        </div>
+      </div>
+      <div className="card">
+        <h3 className="font-semibold mb-2">Live Preview (TFT)</h3>
+        <div className="p-3 rounded-lg" style={{ background: theme.bg_color, color: theme.text_color, border: '1px solid ' + theme.secondary_color, fontFamily: 'monospace', fontSize: '12px' }}>
+          <div style={{ background: theme.header_bg, color: theme.header_text, padding: '2px 4px', marginBottom: '4px', fontSize: '12px' }}>HEADER</div>
+          <div style={{ color: theme.accent_color, fontSize: (theme.title_size * 8 + 8) + 'px', fontWeight: 'bold' }}>Title Text</div>
+          <div style={{ color: theme.text_color, fontSize: (theme.body_size * 8 + 8) + 'px' }}>Body text content</div>
+          <div style={{ color: theme.secondary_color, fontSize: '10px' }}>Secondary info</div>
+          <div style={{ color: theme.warning_color, fontSize: '10px' }}>Warning text</div>
+          <div style={{ color: theme.success_color, fontSize: '10px' }}>Success text</div>
+          <div style={{ color: theme.danger_color, fontSize: '10px' }}>Danger text</div>
+        </div>
+      </div>
+      <button className="btn btn-primary" onClick={saveTheme}>Save & Push to Device</button>
+    </div>
+  );
+}
+
+// ─── Settings ─────────────────────────────────────────────
+function Settings() {
+  return (
+    <div className="space-y-4">
+      <h2 className="text-xl font-bold">Dashboard Settings</h2>
+      <div className="card">
+        <h3 className="font-semibold mb-2">Serial / Device</h3>
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          <div><label className="text-slate-400">COM Port</label><input className="bg-slate-700 rounded px-2 py-1 w-full" defaultValue="COM6" /></div>
+          <div><label className="text-slate-400">Baud Rate</label><input type="number" className="bg-slate-700 rounded px-2 py-1 w-full" defaultValue={115200} /></div>
+        </div>
+      </div>
+      <div className="card">
+        <h3 className="font-semibold mb-2">Polling Intervals (ms)</h3>
+        <div className="grid grid-cols-3 gap-3 text-sm">
+          <div><label className="text-slate-400">PC Metrics</label><input type="number" className="bg-slate-700 rounded px-2 py-1 w-full" defaultValue={1000} /></div>
+          <div><label className="text-slate-400">Sensor Data</label><input type="number" className="bg-slate-700 rounded px-2 py-1 w-full" defaultValue={2000} /></div>
+          <div><label className="text-slate-400">State Push</label><input type="number" className="bg-slate-700 rounded px-2 py-1 w-full" defaultValue={500} /></div>
+        </div>
+      </div>
+      <div className="card">
+        <h3 className="font-semibold mb-2">Display</h3>
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          <div><label className="text-slate-400">TFT Brightness (0-255)</label><input type="number" className="bg-slate-700 rounded px-2 py-1 w-full" defaultValue={220} /></div>
+          <div><label className="text-slate-400">OLED Contrast (0-255)</label><input type="number" className="bg-slate-700 rounded px-2 py-1 w-full" defaultValue={255} /></div>
+        </div>
+      </div>
+      <div className="card">
+        <h3 className="font-semibold mb-2">Lyrics</h3>
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          <label className="flex items-center gap-2"><input type="checkbox" defaultChecked /> Enable LRCLIB sync</label>
+          <div><label className="text-slate-400">Sync offset (ms)</label><input type="number" className="bg-slate-700 rounded px-2 py-1 w-full" defaultValue={500} id="lyricsOffset" /></div>
+        </div>
+      </div>
+      <button className="btn btn-primary" onClick={async () => {
+        try {
+          await api('/config/settings', {method:'PUT', body: JSON.stringify({settings: {lyrics_sync_offset_ms: parseInt(document.getElementById('lyricsOffset').value) || 500}})});
+          alert('Settings saved!');
+        } catch(e) { alert('Error: ' + e.message); }
+      }}>Save Settings</button>
+    </div>
+  );
+}
+
+// ─── Main App ─────────────────────────────────────────────
+const TABS = [
+  { id: 'dashboard', label: 'Dashboard', icon: '📊' },
+  { id: 'expressions', label: 'Expressions', icon: '😊' },
+  { id: 'buttons', label: 'Buttons', icon: '🎮' },
+  { id: 'notifications', label: 'Notifications', icon: '🔔' },
+  { id: 'sensors', label: 'Sensor Graphs', icon: '📈' },
+  { id: 'inspection', label: 'Inspection', icon: '🔧' },
+  { id: 'gaming', label: 'Gaming', icon: '🎯' },
+  { id: 'theme', label: 'Theme', icon: '🎨' },
+  { id: 'device-theme', label: 'Device Theme', icon: '📱' },
+  { id: 'settings', label: 'Settings', icon: '⚙️' },
+];
+
+function App() {
+  const [tab, setTab] = useState('dashboard');
+  const [state, setState] = useState({});
+  const [metrics, setMetrics] = useState({});
+  const [toast, setToast] = useState(null);
+  const [theme, setTheme] = useState(null);
+  const showToast = (msg, type='success') => { setToast({msg, type}); setTimeout(() => setToast(null), 3000); };
+  const refreshState = () => { api('/companion/device-state').then(d => setState(d)).catch(() => {}); api('/desktop/music/status').then(d => setState(s => ({...s, m_title: d.title, m_artist: d.artist, m_art: d.album_art_url || s.m_art, m_play: d.playing ? 1 : 0, m_prog: Math.floor(d.progress_ms/1000), m_dur: Math.floor(d.duration_ms/1000)}))).catch(() => {}); };
+
+  // Load and apply theme
+  useEffect(() => {
+    api('/config/theme').then(d => {
+      setTheme(d);
+      window.applyTheme(d);
+    }).catch(() => {});
+  }, []);
+
+  window.applyTheme = (t) => {
+    const bg = t.background || '#0f172a';
+    const cardBg = t.card_bg || '#1e293b';
+    const text = t.text_color || '#e2e8f0';
+    const textSec = t.text_secondary || '#94a3b8';
+    const border = t.border_color || '#334155';
+    const accent = t.accent_color || '#06b6d4';
+    const radius = (t.border_radius || 12) + 'px';
+
+    // Set CSS variables
+    const root = document.documentElement;
+    root.style.setProperty('--bg', bg);
+    root.style.setProperty('--card-bg', cardBg);
+    root.style.setProperty('--text', text);
+    root.style.setProperty('--text-secondary', textSec);
+    root.style.setProperty('--border', border);
+    root.style.setProperty('--accent', accent);
+    root.style.setProperty('--radius', radius);
+
+    // Apply body styles
+    document.body.style.background = bg;
+    document.body.style.color = text;
+    if (t.wallpaper) {
+      document.body.style.backgroundImage = `url(${t.wallpaper})`;
+      document.body.style.backgroundSize = 'cover';
+      document.body.style.backgroundPosition = 'center';
+      document.body.style.backgroundAttachment = 'fixed';
+    } else {
+      document.body.style.backgroundImage = 'none';
+    }
+
+    // Inject overriding style tag for Tailwind classes
+    let styleTag = document.getElementById('theme-override');
+    if (!styleTag) {
+      styleTag = document.createElement('style');
+      styleTag.id = 'theme-override';
+      document.head.appendChild(styleTag);
+    }
+    styleTag.textContent = `
+      .bg-slate-900 { background-color: ${bg} !important; }
+      .bg-slate-800 { background-color: ${cardBg} !important; }
+      .bg-slate-700 { background-color: ${cardBg} !important; filter: brightness(1.1); }
+      .text-slate-400 { color: ${textSec} !important; }
+      .text-slate-500 { color: ${textSec} !important; opacity: 0.7; }
+      .text-white, .text-slate-200, .text-slate-300 { color: ${text} !important; }
+      .border-slate-700, .border-slate-600 { border-color: ${border} !important; }
+      .text-cyan-400 { color: ${accent} !important; }
+      .bg-cyan-500\\/20 { background-color: ${accent}33 !important; }
+      .card { background: ${cardBg} !important; border-color: ${border} !important; border-radius: ${radius} !important; }
+      button.btn-primary { background: ${accent} !important; color: ${bg} !important; }
+      input, select, textarea { background: ${cardBg} !important; color: ${text} !important; border-color: ${border} !important; }
+    `;
+  };
+
+  useWebSocket((msg) => {
+    if (msg.channel === 'deskbuddy_state' || msg.type === 'deskbuddy_state') {
+      const d = msg.data || msg;
+      // Map summary fields to device-state field names
+      setState(prev => ({
+        ...prev,
+        dev_online: d.device?.online ? 1 : (d.dev_online ?? prev.dev_online),
+        m_title: d.music?.title ?? d.m_title ?? prev.m_title,
+        m_artist: d.music?.artist ?? d.m_artist ?? prev.m_artist,
+        m_art: d.music?.album_art_url ?? d.m_art ?? prev.m_art,
+        m_play: d.music?.playing ? 1 : (d.m_play ?? prev.m_play),
+        m_prog: d.music?.progress_ms ? Math.floor(d.music.progress_ms / 1000) : (d.m_prog ?? prev.m_prog),
+        m_dur: d.music?.duration_ms ? Math.floor(d.music.duration_ms / 1000) : (d.m_dur ?? prev.m_dur),
+        act: d.activity ?? prev.act,
+        expr: d.expression ?? prev.expr,
+        sleep: d.sleep_stage ?? prev.sleep,
+        app: d.app ?? prev.app,
+        win: d.window ?? prev.win,
+        idle: d.idle_seconds ?? prev.idle,
+        audio: d.audio_active ? 1 : (d.audio ?? prev.audio),
+        cpu: d.metrics?.cpu_percent ?? d.cpu ?? prev.cpu,
+        mem: d.metrics?.memory_percent ?? d.mem ?? prev.mem,
+        gpu: d.metrics?.gpu_percent ?? d.gpu ?? prev.gpu,
+        ctemp: d.metrics?.cpu_temp_c ?? d.ctemp ?? prev.ctemp,
+        tz: d.metrics?.thermal_zone_c ?? d.tz ?? prev.tz,
+        gtemp: d.metrics?.gpu_temp_c ?? d.gtemp ?? prev.gtemp,
+        gmem: d.metrics?.gpu_memory_percent ?? d.gmem ?? prev.gmem,
+        gvram: d.metrics?.gpu_memory_total_mb ?? d.gvram ?? prev.gvram,
+        gfan: d.metrics?.gpu_fan_percent ?? d.gfan ?? prev.gfan,
+        env_t: d.environment?.temperature ?? d.env_t ?? prev.env_t,
+        env_h: d.environment?.humidity ?? d.env_h ?? prev.env_h,
+        env_p: d.environment?.pressure ?? d.env_p ?? prev.env_p,
+        batt: d.device?.battery ?? d.batt ?? prev.batt,
+        batt_v: d.device?.battery_voltage ?? d.batt_v ?? prev.batt_v,
+        mic: d.device?.mic_level ?? d.mic ?? prev.mic,
+        unread: d.unread ?? prev.unread,
+        clock: d.clock ?? prev.clock,
+        date: d.date ?? prev.date,
+        dow: d.dow ?? prev.dow,
+        page: d.device?.page ?? d.page ?? prev.page,
+        lyr_cur: d.lyrics?.current ?? d.lyr_cur ?? prev.lyr_cur,
+        lyr_prev: d.lyrics?.prev ?? d.lyr_prev ?? prev.lyr_prev,
+        lyr_next: d.lyrics?.next ?? d.lyr_next ?? prev.lyr_next,
+        lyr_ok: d.lyrics?.available ? 1 : (d.lyr_ok ?? prev.lyr_ok),
+        lyr_sync: d.lyrics?.synced ? 1 : (d.lyr_sync ?? prev.lyr_sync),
+        lyr_idx: d.lyrics?.index ?? d.lyr_idx ?? prev.lyr_idx,
+        lyr_tot: d.lyrics?.total ?? d.lyr_tot ?? prev.lyr_tot,
+      }));
+    }
+  });
+
+  useEffect(() => {
+    const poll = () => {
+      api('/system/metrics').then(d => setMetrics(d)).catch(() => {});
+      api('/companion/device-state').then(d => setState(d)).catch(() => {});
+    };
+    poll();
+    const id = setInterval(poll, 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  return (
+    <div className="min-h-screen">
+      {toast && <div className={`fixed top-4 right-4 z-50 px-4 py-2 rounded-lg text-sm font-medium ${toast.type === 'error' ? 'bg-red-500/90 text-white' : 'bg-green-500/90 text-white'}`}>{toast.msg}</div>}
+      <header className="bg-slate-900 border-b border-slate-700 px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <span className="text-2xl">🤖</span>
+          <span className="text-lg font-bold">DeskBuddy Control Panel</span>
+        </div>
+        <div className="flex items-center gap-2 text-sm text-slate-400">
+          <span className={`w-2 h-2 rounded-full ${state.dev_online ? 'bg-green-400' : 'bg-red-400'}`}></span>
+          {state.dev_online ? 'Device Online' : 'Device Offline'}
+        </div>
+      </header>
+      <div className="flex">
+        <nav className="w-48 bg-slate-900 border-r border-slate-700 min-h-screen p-2 space-y-1">
+          {TABS.map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)}
+              className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 ${tab === t.id ? 'bg-cyan-500/20 text-cyan-400' : 'text-slate-400 hover:bg-slate-800'}`}>
+              <span>{t.icon}</span> {t.label}
+            </button>
+          ))}
+        </nav>
+        <main className="flex-1 p-4 md:p-6 max-w-5xl">
+          {tab === 'dashboard' && <Dashboard state={state} metrics={metrics} />}
+          {tab === 'expressions' && <Expressions />}
+          {tab === 'buttons' && <ButtonMappings />}
+          {tab === 'notifications' && <Notifications />}
+          {tab === 'sensors' && <SensorGraphs />}
+          {tab === 'inspection' && <InspectionModels />}
+          {tab === 'gaming' && <GamingMode />}
+          {tab === 'theme' && <ThemeEditor />}
+          {tab === 'device-theme' && <DeviceThemeEditor />}
+          {tab === 'settings' && <Settings />}
+        </main>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

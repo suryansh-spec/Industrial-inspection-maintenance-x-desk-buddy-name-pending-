@@ -1,0 +1,393 @@
+ESP32-S3 DESK BUDDY / INDUSTRIAL INSPECTION SYSTEM HARDWARE INTERFACING
+AND ARDUINO CONFIGURATION NOTES Last updated: 18 November 2026
+
+====================================================================== 1.
+SCOPE AND CURRENT CONFIGURATION
+======================================================================
+
+This document records the current known-good hardware interfaces, GPIO
+allocation, Arduino IDE settings, libraries, and troubleshooting
+history.
+
+Currently working: - SH1106-compatible 1.3-inch 128x64 I2C OLED - BME280
+environmental sensor - ADXL345 3-axis accelerometer - ST7735 SPI TFT
+display
+
+The MPU6050 was not detected during I2C testing. The user switched to
+the ADXL345, which is now reported as working perfectly. Keep the
+suspect MPU6050 disconnected from the active I2C bus.
+
+Where a detail was proposed but not fully verified on the physical
+assembly, it is explicitly marked as such.
+
+======================================================================
+2. ESP32-S3 BOARD AND ARDUINO IDE SETTINGS
+======================================================================
+
+Board: ESP32-S3 N16R8
+
+Arduino IDE board profile: ESP32S3 Dev Module
+
+Confirmed working settings: Flash Size: 16MB Flash Mode: QIO Flash
+Frequency: 80MHz PSRAM: OPI PSRAM Partition Scheme: 16M Flash USB CDC On
+Boot: Disabled Upload Speed: 921600 (minimum offered by installed IDE)
+Serial Monitor: 115200 baud
+
+Observed board diagnostics: Chip: ESP32-S3 CPU frequency: 240MHz
+Crystal: 40MHz Flash: 16MB PSRAM: 8MB, OPI Chip revision reported:
+ESP32-S3 rev 0.2
+
+Configuration notes: - ESP32S3 Dev Module is the known working board
+profile. - ESP32S3 USB OTG was previously tested but did not provide the
+expected serial-monitor behaviour. - USB CDC On Boot = Disabled is
+important for the current working serial setup. Enabling it previously
+resulted in a blank Serial Monitor. - Keep Flash Size and Partition
+Scheme consistent at 16MB. A mismatch with a 4MB flash setting
+previously caused a partition error. - Serial Monitor baud rate must
+match Serial.begin(115200).
+
+======================================================================
+3. MASTER GPIO ALLOCATION
+======================================================================
+
+GPIO 8: I2C SDA OLED SDA + BME280 SDA + ADXL345 SDA
+
+GPIO 9: I2C SCL OLED SCL + BME280 SCL + ADXL345 SCL
+
+GPIO 10: ST7735 TFT chip select (CS)
+
+GPIO 11: ST7735 TFT MOSI
+
+GPIO 12: ST7735 TFT SPI clock (SCLK)
+
+GPIO 13: ST7735 TFT data/command (DC)
+
+GPIO 14: ST7735 TFT reset (RST)
+
+GPIO 15: TFT backlight allocation in the integration wiring plan. VERIFY
+whether the physical module’s backlight is actually controlled by this
+GPIO or tied directly to 3.3V.
+
+GPIO 16: MODE button (INPUT_PULLUP, active LOW, to GND)
+
+GPIO 17: VOICE button (INPUT_PULLUP, active LOW, to GND)
+
+GPIO 18: DOWN button (INPUT_PULLUP, active LOW, to GND)
+
+GPIO 19: UP button (INPUT_PULLUP, active LOW, to GND). GPIO19 is also
+native USB D-, so avoid using the native USB port while this button is
+connected.
+
+GPIO 4: SELECT button (INPUT_PULLUP, active LOW, to GND)
+
+GPIO 21: speaker / buzzer PWM output
+
+GPIO 1: battery divider ADC input (ADC1_CH0)
+
+GPIO 5 / 6 / 7: I2S microphone SCK / WS / SD
+
+Reserved / avoid unless deliberately reconfigured: GPIO 19 and GPIO 20:
+Native USB-related pins.
+
+    GPIO 0, GPIO 3, GPIO 45, GPIO 46:
+        Strapping-related pins. Avoid for ordinary peripheral allocation
+        unless the exact board design has been checked.
+
+    GPIO 26 through GPIO 32:
+        Connected to the in-package SPI flash on the N16R8 module.
+        Configuring these pins in software can crash the firmware.
+        The original DOWN=GPIO32 assignment caused a boot loop and was
+        moved to GPIO18.
+
+    GPIO 33 through GPIO 37:
+        Not available on the ESP32-S3-WROOM-1 module; GPIO35-GPIO37 are
+        used by octal PSRAM. Do not wire peripherals to these pins.
+        The original speaker=GPIO33 and battery=GPIO34 assignments were
+        moved to GPIO21 and GPIO1.
+
+Unverified: Onboard RGB LED GPIO: Not confirmed. GPIO48 was only a
+candidate; do not treat it as an established assignment.
+
+GPIO allocation rule: All current I2C sensors share GPIO8 and GPIO9. Do
+not allocate separate I2C pins to each sensor unless intentionally
+creating another I2C bus.
+
+======================================================================
+4. SHARED I2C BUS: OLED + BME280 + ADXL345
+======================================================================
+
+I2C controller: Arduino Wire
+
+Pins: SDA = GPIO 8 SCL = GPIO 9
+
+Bus speed: 100kHz
+
+Initialization: Wire.begin(8, 9); Wire.setClock(100000);
+
+Detected addresses: OLED: 0x3C ADXL345: 0x53 BME280: 0x77
+
+Expected scanner output with all three connected: Found device at: 0x3C
+Found device at: 0x53 Found device at: 0x77
+
+The order may vary.
+
+General power and wiring: - Use a common ground between ESP32 and every
+module. - Current sensor wiring uses the ESP32 3.3V rail. - ESP32 3.3V
+rail was measured at approximately 3.23V. - Do not assume every breakout
+board is 5V tolerant. Use 3.3V unless the exact module datasheet
+explicitly supports another supply.
+
+OLED: Display: 1.3-inch, 128x64, 4-pin I2C Controller: SH1106-compatible
+(working U8g2 driver) Address: 0x3C VCC: ESP32 3.3V GND: ESP32 GND SDA:
+GPIO 8 SCL: GPIO 9
+
+BME280: Interface: I2C Address: 0x77 VCC / VIN: ESP32 3.3V GND: ESP32
+GND SDA: GPIO 8 SCL: GPIO 9
+
+ADXL345: Interface: I2C Address selected: 0x53 VCC: ESP32 3.3V GND:
+ESP32 GND SDA: GPIO 8 SCL: GPIO 9 CS: 3.3V (HIGH selects I2C mode on
+standard ADXL345 boards) SDO: GND (selects address 0x53 on standard
+ADXL345 boards) INT1: Not connected INT2: Not connected
+
+ADXL345 address note: With SDO HIGH, the usual alternate I2C address is
+0x1D. Check the exact breakout pin labels and board requirements.
+
+======================================================================
+5. ST7735 TFT DISPLAY - SPI
+======================================================================
+
+Display: ST7735 TFT module
+
+Working integration GPIO assignment: TFT CS: GPIO 10 TFT MOSI: GPIO 11
+TFT SCLK: GPIO 12 TFT DC: GPIO 13 TFT RST: GPIO 14 TFT BL: GPIO 15
+allocation in wiring plan TFT VCC: 3.3V TFT GND: GND
+
+SPI notes: - The display uses the ESP32 SPI interface. - The tested
+integration used the default SPI object and explicitly initialized the
+selected clock and MOSI pins. - No MISO connection was used in the shown
+display wiring.
+
+Representative initialization pattern: SPIClass *tftSPI = &SPI;
+Adafruit_ST7735 tft(tftSPI, TFT_CS, TFT_DC, TFT_RST);
+
+    tftSPI->begin(TFT_SCLK, -1, TFT_MOSI, TFT_CS);
+    tft.initR(INITR_BLACKTAB);
+    tft.setRotation(1);
+
+The exact ST7735 tab/color initialization can depend on the module
+variant. The user’s working integration used INITR_BLACKTAB and rotation
+1.
+
+======================================================================
+6. REQUIRED ARDUINO LIBRARIES
+======================================================================
+
+Install through Arduino IDE Library Manager.
+
+OLED: U8g2 Driver used: U8G2_SH1106_128X64_NONAME_F_HW_I2C
+
+BME280: Adafruit BME280 Library Adafruit Unified Sensor
+
+ADXL345: Adafruit ADXL345 Adafruit Unified Sensor
+
+TFT: Adafruit GFX Library Adafruit ST7735 and ST7789 Library
+
+Core interfaces: Wire SPI
+
+Wire and SPI are provided by the ESP32 Arduino core and are not
+separately installed through Library Manager.
+
+======================================================================
+7. KNOWN-GOOD SENSOR INITIALIZATION PATTERNS
+======================================================================
+
+I2C and OLED:
+
+    #include <Wire.h>
+    #include <U8g2lib.h>
+
+    #define SDA_PIN 8
+    #define SCL_PIN 9
+
+    U8G2_SH1106_128X64_NONAME_F_HW_I2C oled(
+        U8G2_R0,
+        U8X8_PIN_NONE,
+        SCL_PIN,
+        SDA_PIN
+    );
+
+    Wire.begin(SDA_PIN, SCL_PIN);
+    Wire.setClock(100000);
+
+    oled.setI2CAddress(0x3C << 1);
+    oled.begin();
+
+BME280:
+
+    #include <Adafruit_BME280.h>
+
+    Adafruit_BME280 bme;
+    bool bmeOnline = bme.begin(0x77, &Wire);
+
+ADXL345:
+
+    #include <Adafruit_Sensor.h>
+    #include <Adafruit_ADXL345_U.h>
+
+    Adafruit_ADXL345_Unified adxl =
+        Adafruit_ADXL345_Unified(12345);
+
+    bool adxlOnline = adxl.begin(0x53);
+
+    if (adxlOnline) {
+        adxl.setRange(ADXL345_RANGE_4_G);
+        adxl.setDataRate(ADXL345_DATARATE_100_HZ);
+    }
+
+IMPORTANT ADXL345 LIBRARY API COMPATIBILITY: - The installed
+Adafruit_ADXL345 library exposes: bool begin(uint8_t addr =
+ADXL345_DEFAULT_ADDRESS); - Use: adxl.begin(0x53); - Do NOT use:
+adxl.begin(0x53, &Wire); The two-argument call does not compile with the
+installed library. - The library uses the global Wire interface.
+Initialize Wire with the required ESP32 pins before calling
+adxl.begin().
+
+Reading ADXL345:
+
+    sensors_event_t event;
+    adxl.getEvent(&event);
+
+    float x = event.acceleration.x;
+    float y = event.acceleration.y;
+    float z = event.acceleration.z;
+
+Acceleration units: m/s^2
+
+At rest, acceleration magnitude should be close to 9.81 m/s^2 because
+the sensor measures gravity as well as motion. The axis carrying most of
+the gravity component depends on sensor orientation.
+
+Reading BME280:
+
+    float temperature = bme.readTemperature();       // degrees C
+    float humidity = bme.readHumidity();             // percent
+    float pressure = bme.readPressure() / 100.0F;    // hPa
+
+======================================================================
+8. OLED AND SERIAL OUTPUT REQUIREMENT
+======================================================================
+
+Project requirement: Sensor readings must be available on BOTH: 1. OLED
+display 2. Arduino Serial Monitor
+
+The 128x64 OLED cannot show every measurement at once with comfortable
+readability. Use multiple pages or alternate dashboards.
+
+The integrated dashboard design: Page 1 - Environment: Temperature (C)
+Humidity (%) Pressure (hPa)
+
+    Page 2 - Motion:
+        ADXL345 X acceleration (m/s^2)
+        ADXL345 Y acceleration (m/s^2)
+        ADXL345 Z acceleration (m/s^2)
+
+The integrated example used: Sensor read interval: 250ms OLED page
+interval: 3000ms ADXL345 data rate: 100Hz
+
+Serial Monitor: Baud rate: 115200
+
+Print sensor readings and device online/offline status to Serial.
+
+======================================================================
+9. MPU6050 TROUBLESHOOTING HISTORY - NOT ACTIVE
+======================================================================
+
+Previous intended wiring: VCC -> 3.3V GND -> GND SDA -> GPIO8 SCL ->
+GPIO9 AD0 -> GND (intended address 0x68)
+
+Expected addresses: 0x68 or 0x69
+
+Observed scanner results: OLED: 0x3C BME280: 0x77 MPU6050: not detected
+
+WHO_AM_I register 0x75: Address 0x68: 0xFF Address 0x69: 0xFF
+
+Standalone scan also detected only 0x3C and 0x77.
+
+Electrical checks reported: ESP32 3V3 to GND: approximately 3.23V
+MPU6050 VCC to GND: approximately 3.3V GPIO8 to GND: approximately 3.23V
+GPIO9 to GND: approximately 3.23V MPU6050 SDA/SCL to GND: approximately
+3.3V
+
+The SDA continuity measurement was reported as fluctuating/high. The SCL
+continuity measurement was approximately 001 on the meter display. Exact
+meter units/range were not established.
+
+Conclusion: MPU6050 did not respond on I2C. User elected to use ADXL345
+instead, and ADXL345 integration was subsequently reported as working.
+
+Keep the suspect MPU6050 disconnected from the active bus.
+
+======================================================================
+10. TROUBLESHOOTING CHECKLIST
+======================================================================
+
+If an I2C device is not detected:
+
+1.  Confirm common GND.
+2.  Confirm module supply voltage measured directly at module VCC/GND.
+3.  Confirm SDA and SCL are not swapped.
+4.  Confirm continuity from ESP32 GPIO to module pin with power OFF.
+5.  Check address-select pins.
+6.  Check interface-mode pins (ADXL345 CS must select I2C mode).
+7.  Run an I2C scanner before debugging sensor-library initialization.
+8.  Confirm the installed library API matches the code.
+9.  Keep I2C at 100kHz while diagnosing.
+10. Disconnect a suspect module if it holds a bus line LOW or causes
+    known-good I2C devices to disappear.
+
+ADXL345: SDO=GND -> usual address 0x53 SDO=HIGH -> usual address 0x1D
+CS=HIGH -> I2C mode
+
+OLED: Address 0x3C
+
+BME280 in this assembly: Detected address 0x77
+
+======================================================================
+11. CURRENT VERIFIED INTEGRATION STATUS
+======================================================================
+
+OLED (SH1106-compatible, 128x64): Interface: I2C GPIO: SDA 8, SCL 9
+Address: 0x3C Status: WORKING
+
+BME280: Interface: I2C GPIO: SDA 8, SCL 9 Address: 0x77 Status: WORKING
+
+ADXL345: Interface: I2C GPIO: SDA 8, SCL 9 Address: 0x53 Status: WORKING
+Configuration used: +/-4g, 100Hz data rate
+
+ST7735 TFT: Interface: SPI GPIO: CS 10, MOSI 11, SCLK 12, DC 13, RST 14
+GPIO15 allocated for backlight in wiring plan Status: WORKING
+
+MPU6050: Interface: I2C Expected address: 0x68 (AD0 low) Status: NOT
+DETECTED; replaced in working setup by ADXL345
+
+======================================================================
+12. RULES FOR FUTURE COMPONENT INTEGRATION
+======================================================================
+
+-   Preserve the existing GPIO allocation unless a deliberate redesign
+    is documented.
+-   Check the master GPIO table before assigning any new pin.
+-   Prefer sharing the existing I2C bus for compatible I2C sensors.
+-   Verify each new component independently before combining it with the
+    complete system.
+-   For every new sensor integration, document: wiring and pinout supply
+    voltage interface and address GPIO allocation Arduino libraries
+    board settings diagnostic scanner result working initialization code
+-   Display sensor readings on OLED as well as Serial Monitor.
+-   Use multiple OLED pages when readings do not fit clearly.
+-   Keep the known-good Arduino IDE board configuration unchanged unless
+    there is a specific reason to modify it.
+-   Do not assume a module pinout from its product name alone. Check the
+    actual board labels and, where needed, its datasheet.
+
+END OF DOCUMENT
