@@ -219,19 +219,18 @@ class MusicController:
             else:
                 smtc_status = self._status
             
-            # Determine playing state: intended override, or heuristic for
-            # backgrounded tabs (SMTC reports paused but track is still going).
-            if self._intended_playing is not None:
-                _is_playing = self._intended_playing
-            else:
+            # Intended override takes priority.
+            _is_playing = self._intended_playing  # may be None
+            # Interpolate progress for backgrounded tabs (SMTC position freezes).
+            if _is_playing is None:
                 _session_alive = bool(smtc_status.title) and smtc_status.duration_ms > 0
                 _not_ended = smtc_status.progress_ms < smtc_status.duration_ms
                 _is_playing = (not self._explicitly_paused) and (
                     smtc_status.playing or (_session_alive and _not_ended)
                 )
-            smtc_status.playing = _is_playing
+            smtc_status.playing = _is_playing if _is_playing is not None else smtc_status.playing
             # Interpolate progress for backgrounded tabs (SMTC position freezes).
-            if smtc_status.duration_ms > 0 and _is_playing:
+            if smtc_status.duration_ms > 0 and smtc_status.playing:
                 elapsed_ms = int((time.monotonic() - self._last_smtc_read_time) * 1000)
                 if smtc_status.progress_ms == self._last_smtc_position_ms and elapsed_ms > 0 and self._last_smtc_position_ms > 0:
                     estimated = self._last_smtc_position_ms + elapsed_ms
@@ -253,9 +252,15 @@ class MusicController:
             return self._get_ytmusic_status()
         elif self._provider in ["windows_media", "wmp"]:
             status = self._get_windows_status()
-            # Interpolate progress for backgrounded tabs (SMTC position freezes)
-            # Only interpolate while actually playing.
-            if status.duration_ms > 0 and status.playing:
+            # Heuristic playing state for backgrounded tabs.
+            _session_alive = bool(status.title) and status.duration_ms > 0
+            _not_ended = status.progress_ms < status.duration_ms
+            _is_playing = (not self._explicitly_paused) and (
+                status.playing or (_session_alive and _not_ended)
+            )
+            status.playing = _is_playing
+            # Interpolate progress for backgrounded tabs (SMTC position freezes).
+            if status.duration_ms > 0 and _is_playing:
                 elapsed_ms = int((time.monotonic() - self._last_smtc_read_time) * 1000)
                 if status.progress_ms == self._last_smtc_position_ms and elapsed_ms > 0 and self._last_smtc_position_ms > 0:
                     estimated = self._last_smtc_position_ms + elapsed_ms
