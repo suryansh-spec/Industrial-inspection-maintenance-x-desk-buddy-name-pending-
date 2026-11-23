@@ -368,6 +368,16 @@ SensorState sensors;
 I2SClass i2s;
 int32_t micBuffer[320];
 float micLevelSmoothed = 0.0f;
+
+// FFT visualizer state (256-point real FFT on mic samples)
+#define FFT_N 256
+#define FFT_BARS 16
+float fftRe[FFT_N];
+float fftIm[FFT_N];
+float fftBins[FFT_BARS];
+float fftBassAvg = 0.0f;
+bool fftBeat = false;
+unsigned long fftBeatMs = 0;
 PomodoroState pomodoro;
 Note notes[8];
 int noteCount = 0;
@@ -528,6 +538,7 @@ void bootScreen();
 void readEnvironment();
 void readMotion();
 void readMicrophone();
+void computeFftFromMic();
 void performGesture(int taps);
 void updateBattery();
 int  batteryPercent();
@@ -848,6 +859,88 @@ void readMicrophone() {
     micLevelSmoothed = (micLevelSmoothed * 0.85f) + (level * 0.15f);
   }
   sensors.micLevel = (int)(micLevelSmoothed + 0.5f);
+
+  // Update FFT visualizer data (cheap enough at 20 ms cadence).
+  computeFftFromMic();
+}
+
+void computeFftFromMic() {
+  const int N = FFT_N;
+  if (sensors.micOk == false) return;
+
+  // Collect N samples from micBuffer (already filled by readMicrophone).
+  long sum = 0;
+  for (int i = 0; i < N; i++) sum += (long)micBuffer[i];
+  float mean = (float)sum / (float)N;
+
+  // Hann window + real input
+  for (int i = 0; i < N; i++) {
+    float w = 0.5f * (1.0f - cosf(2.0f * 3.14159265f * (float)i / (float)(N - 1)));
+    fftRe[i] = ((float)micBuffer[i] - mean) * w;
+    fftIm[i] = 0.0f;
+  }
+
+  // Iterative Cooley-Tukey FFT
+  // bit reversal
+  int j = 0;
+  for (int i = 1; i < N; i++) {
+    int bit = N >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) {
+      float tr = fftRe[i]; fftRe[i] = fftRe[j]; fftRe[j] = tr;
+      float ti = fftIm[i]; fftIm[i] = fftIm[j]; fftIm[j] = ti;
+    }
+  }
+  for (int len = 2; len <= N; len <<= 1) {
+    float ang = -2.0f * 3.14159265f / (float)len;
+    float wlenR = cosf(ang), wlenI = sinf(ang);
+    for (int i = 0; i < N; i += len) {
+      float wR = 1.0f, wI = 0.0f;
+      for (int k = 0; k < len / 2; k++) {
+        float uR = fftRe[i + k];
+        float uI = fftIm[i + k];
+        float vR = fftRe[i + k + len / 2] * wR - fftIm[i + k + len / 2] * wI;
+        float vI = fftRe[i + k + len / 2] * wI + fftIm[i + k + len / 2] * wR;
+        fftRe[i + k] = uR + vR;
+        fftIm[i + k] = uI + vI;
+        fftRe[i + k + len / 2] = uR - vR;
+        fftIm[i + k + len / 2] = uI - vI;
+        float nR = wR * wlenR - wI * wlenI;
+        float nI = wR * wlenI + wI * wlenR;
+        wR = nR; wI = nI;
+      }
+    }
+  }
+
+  // Magnitudes into FFT_BARS (skip DC, group bins)
+  int binsPerBar = (N / 2) / FFT_BARS;
+  if (binsPerBar < 1) binsPerBar = 1;
+  for (int b = 0; b < FFT_BARS; b++) {
+    float mag = 0.0f;
+    int start = 1 + b * binsPerBar;
+    int end = start + binsPerBar;
+    if (end > N / 2) end = N / 2;
+    for (int k = start; k < end; k++) {
+      float m = sqrtf(fftRe[k] * fftRe[k] + fftIm[k] * fftIm[k]);
+      if (m > mag) mag = m;
+    }
+    // smooth
+    fftBins[b] = fftBins[b] * 0.6f + (mag / 400000.0f) * 0.4f;
+    if (fftBins[b] > 1.0f) fftBins[b] = 1.0f;
+    if (fftBins[b] < 0.0f) fftBins[b] = 0.0f;
+  }
+
+  // Beat detection from bass energy (first 3 bars)
+  float bass = (fftBins[0] + fftBins[1] + fftBins[2]) / 3.0f;
+  if (fftBassAvg <= 0.0f) fftBassAvg = bass;
+  if (bass > fftBassAvg * 1.6f && bass > 0.12f && millis() - fftBeatMs > 220) {
+    fftBeat = true;
+    fftBeatMs = millis();
+  } else {
+    if (millis() - fftBeatMs > 120) fftBeat = false;
+  }
+  fftBassAvg = fftBassAvg * 0.85f + bass * 0.15f;
 }
 
 // Gesture tuning. Taps are short spikes; a shake is sustained motion, so the

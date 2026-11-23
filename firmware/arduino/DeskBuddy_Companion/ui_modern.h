@@ -794,78 +794,114 @@ static char  uiLastTitle[64] = "";
 
 void drawMusicPage() {
   uint16_t accent = (uiCoverAccent && state.musicTitle[0]) ? uiCoverAccent : theme.accent;
-  uiBackground(accent, 52);
+  uint16_t* fb = uiFb();
+
+  // --- FFT visualizer as full-page background ---
+  for (int i = 0; i < UI_W * UI_H; i++) fb[i] = theme.bg;
+
+  // Draw vertical bars for each FFT bin across the whole page.
+  int barW = UI_W / FFT_BARS;
+  if (barW < 1) barW = 1;
+  for (int b = 0; b < FFT_BARS; b++) {
+    float v = fftBins[b];
+    if (v < 0.0f) v = 0.0f;
+    if (v > 1.0f) v = 1.0f;
+    int h = (int)(v * (UI_H - 6));
+    if (h < 2) h = 2;
+    int x0 = b * barW;
+    int x1 = x0 + barW - 1;
+    if (x1 >= UI_W) x1 = UI_W - 1;
+    bool beat = fftBeat && (millis() - fftBeatMs < 120);
+    for (int x = x0; x <= x1; x++) {
+      for (int y = UI_H - 1; y >= UI_H - h; y--) {
+        float t = (float)(UI_H - 1 - y) / (float)(h > 1 ? h : 1);
+        uint8_t alpha = (uint8_t)(50 + 170 * t);
+        if (beat) alpha = 255;
+        uint16_t col = uiLerp(theme.bg, accent, alpha);
+        int idx = y * UI_W + x;
+        fb[idx] = uiLerp(fb[idx], col, beat ? 220 : 170);
+      }
+    }
+  }
+
+  // Light "blur": horizontal smear of each row.
+  static uint16_t blurRow[UI_W];
+  for (int y = 0; y < UI_H; y++) {
+    for (int x = 0; x < UI_W; x++) {
+      uint16_t c0 = fb[y * UI_W + (x > 0 ? x - 1 : x)];
+      uint16_t c1 = fb[y * UI_W + x];
+      uint16_t c2 = fb[y * UI_W + (x < UI_W - 1 ? x + 1 : x)];
+      // average RGB565 via channel split
+      uint8_t r0 = (c0 >> 11) & 0x1F, g0 = (c0 >> 5) & 0x3F, b0 = c0 & 0x1F;
+      uint8_t r1 = (c1 >> 11) & 0x1F, g1 = (c1 >> 5) & 0x3F, b1 = c1 & 0x1F;
+      uint8_t r2 = (c2 >> 11) & 0x1F, g2 = (c2 >> 5) & 0x3F, b2 = c2 & 0x1F;
+      uint8_t rr = (r0 + r1 * 2 + r2) >> 2;
+      uint8_t gg = (g0 + g1 * 2 + g2) >> 2;
+      uint8_t bb = (b0 + b1 * 2 + b2) >> 2;
+      blurRow[x] = (rr << 11) | (gg << 5) | bb;
+    }
+    memcpy(&fb[y * UI_W], blurRow, UI_W * sizeof(uint16_t));
+  }
+
+  // Readability scrim.
+  for (int i = 0; i < UI_W * UI_H; i++) fb[i] = uiLerp(fb[i], theme.bg, 150);
+
   uiTopBar("Music");
 
   if (state.musicTitle[0] == '\0') {
-    uiCard(38, 34, 52, 52, 12, uiCardCol(), theme.text, 40);
-    uiNoteGlyph(62, 66, theme.secondary);
-    uiText(64, 106, "Nothing playing", F_BOLD, theme.text, 1);
-    uiText(64, 120, "Open YouTube Music", F_REG, theme.secondary, 1);
+    uiText(64, 70, "Nothing playing", F_BOLD, theme.text, 1);
+    uiText(64, 86, "Open YouTube Music", F_REG, theme.secondary, 1);
     uiPageDots();
     return;
   }
+
   if (strcmp(uiLastTitle, state.musicTitle) != 0) {
     strncpy(uiLastTitle, state.musicTitle, sizeof(uiLastTitle) - 1);
     uiProg = -1;
   }
 
   uiSmooth(uiPlayT, state.musicPlaying ? 1.0f : 0.0f, 9.0f);
-  const int cx = (UI_W - UI_COVER) / 2, cy = 24;
 
-  // soft halo that breathes while playing
-  float breathe = 0.5f + 0.5f * sinf(uiNowMs / 480.0f);
-  for (int i = 3; i >= 1; i--)
-    uiCard(cx - i * 2, cy - i * 2, UI_COVER + i * 4, UI_COVER + i * 4, 10 + i * 2, accent, accent, 0,
-           (uint8_t)((6 + 6 * breathe * uiPlayT) * (4 - i) * (0.35f + 0.65f * uiPlayT)));
-
-  float dim = (1.0f - uiPlayT) * 0.55f;
+  // Cover art (small, top-left).
+  const int C = 40;
   if (uiCoverReady && uiCoverBig) {
-    const float R = 8.0f;
-    uint8_t dimA = (uint8_t)(dim * 255);
-    for (int yy = 0; yy < UI_COVER; yy++) {
-      for (int xx = 0; xx < UI_COVER; xx++) {
-        float cov = 1.0f;
-        int dx = xx < UI_COVER - 1 - xx ? xx : UI_COVER - 1 - xx;
-        int dy = yy < UI_COVER - 1 - yy ? yy : UI_COVER - 1 - yy;
-        if (dx < R && dy < R) {
-          float ox = R - dx - 0.5f, oy = R - dy - 0.5f;
-          cov = uiClamp01(R - sqrtf(ox * ox + oy * oy) + 0.5f);
-          if (cov <= 0) continue;
-        }
-        uint16_t c = uiCoverBig[yy * UI_COVER + xx];
-        if (dimA) c = uiLerp(c, theme.bg, dimA);
-        uiPx(cx + xx, cy + yy, c, (uint8_t)(cov * 255));
+    for (int yy = 0; yy < C; yy++) {
+      for (int xx = 0; xx < C; xx++) {
+        int sx = xx * UI_COVER / C;
+        int sy = yy * UI_COVER / C;
+        uiPx(8 + xx, 22 + yy, uiCoverBig[sy * UI_COVER + sx], 255);
       }
     }
   } else {
-    uiCard(cx, cy, UI_COVER, UI_COVER, 8, uiLerp(theme.bg, accent, 70), accent, 60);
-    uiNoteGlyph(cx + UI_COVER / 2 - 3, cy + UI_COVER / 2 + 4, accent);
-  }
-  if (uiPlayT < 0.98f) {
-    uint8_t a = (uint8_t)((1.0f - uiPlayT) * 235);
-    int px = cx + UI_COVER / 2 - 6;
-    uiCard(px, cy + UI_COVER / 2 - 7, 4, 14, 1.5f, theme.text, theme.text, 0, a);
-    uiCard(px + 9, cy + UI_COVER / 2 - 7, 4, 14, 1.5f, theme.text, theme.text, 0, a);
+    uiCard(8, 22, C, C, 6, uiLerp(theme.bg, accent, 70), accent, 60);
   }
 
-  uiMarquee(8, 86, 112, state.musicTitle, F_BOLD, theme.text, theme.bg, true);
-  uiTextFit(64, 99, state.musicArtist[0] ? state.musicArtist : "Unknown artist", F_REG, theme.secondary, 112, 1);
+  // Title + artist to the right of cover.
+  uiMarquee(52, 30, 68, state.musicTitle, F_BOLD, theme.text, theme.bg, true);
+  uiTextFit(52, 46, state.musicArtist[0] ? state.musicArtist : "Unknown artist", F_REG, theme.secondary, 68, 0);
 
+  // Current lyric line.
+  if (state.lyricsAvailable && state.lyricCur[0] != '\0') {
+    uiTextFit(8, 74, state.lyricCur, F_REG, uiFade(accent, 0.9f), 112, 1);
+  } else if (state.lyricCur[0] != '\0') {
+    uiTextFit(8, 74, state.lyricCur, F_REG, uiFade(theme.text, 0.7f), 112, 1);
+  }
+
+  // Progress bar.
   float target = state.musicDuration > 0 ? uiClamp01((float)state.musicProgress / state.musicDuration) : 0.0f;
   if (uiProg < 0) uiProg = target;
   uiSmooth(uiProg, target, 6.0f);
-  uiCard(8, 106, 112, 4, 2, uiTrackCol(), uiTrackCol(), 0);
-  if (uiProg > 0.002f) uiCard(8, 106, fmaxf(4.0f, 112 * uiProg), 4, 2, accent, accent, 0);
-  uiDisc(8 + 112 * uiProg, 108, 3.4f, theme.text);
+  uiCard(8, 92, 112, 4, 2, uiTrackCol(), uiTrackCol(), 0);
+  if (uiProg > 0.002f) uiCard(8, 92, fmaxf(4.0f, 112 * uiProg), 4, 2, accent, accent, 0);
+  uiDisc(8 + 112 * uiProg, 94, 3.4f, theme.text);
 
   char a[12], b[12]; uiFmtTime(state.musicProgress, a, sizeof(a)); uiFmtTime(state.musicDuration, b, sizeof(b));
-  uiText(8, 124, a, F_REG, theme.secondary, 0);
-  uiText(120, 124, b, F_REG, theme.secondary, 2);
+  uiText(8, 106, a, F_REG, theme.secondary, 0);
+  uiText(120, 106, b, F_REG, theme.secondary, 2);
 
   char hint[32];
   snprintf(hint, sizeof(hint), state.musicPlaying ? "Playing" : "Paused");
-  uiText(64, 138, hint, F_REG, state.musicPlaying ? theme.success : theme.warning, 1);
+  uiText(64, 124, hint, F_REG, state.musicPlaying ? theme.success : theme.warning, 1);
   uiPageDots();
 }
 
