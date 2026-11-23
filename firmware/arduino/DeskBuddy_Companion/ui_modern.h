@@ -409,9 +409,10 @@ static void uiTextAA(int x, int y, const char* s, uint8_t fid, uint16_t col, int
 
 static void uiText(int x, int y, const char* s, uint8_t fid, uint16_t col, int align = 0) {
   if (!s || !s[0]) return;
-  // TTF fonts (mode >= 4) are 4-bit AA; always use uiTextAA for them.
-  // Pixel font (mode 0-3) uses sprite.print (1-bit).
-  if (uiFontAA || uiFontFaceMode >= 4) {
+  // TTF fonts (mode >= 4) are 4-bit AA; use uiTextAA for them.
+  // Pixel fonts (mode 0-3) are 1-bit; use sprite.print for them.
+  // uiFontAA flag is ignored for Pixel fonts (they don't support AA).
+  if (uiFontFaceMode >= 4) {
     uiTextAA(x, y, s, fid, col, align);
     return;
   }
@@ -900,11 +901,13 @@ void drawMusicPage() {
     uiCard(8, 22, C, C, 6, uiLerp(theme.bg, accent, 70), accent, 60);
   }
 
-  // Title + artist (TTF fonts with auto-AA).
+  // Title + artist (TTF fonts with auto-AA, larger sizes for readability).
   uiFontFaceMode = uiMusicTitleFont; uiFontAA = true;
-  uiTextFit(52, 30, state.musicTitle, F_BOLD, theme.text, 68, 1);
+  // Use F_HUGE (21px) for title - clear and readable, with marquee for long text
+  uiMarquee(52, 26, 74, state.musicTitle, F_HUGE, theme.text, theme.bg, true);
   uiFontFaceMode = uiMusicArtistFont; uiFontAA = true;
-  uiTextFit(52, 46, state.musicArtist[0] ? state.musicArtist : "Unknown artist", F_REG, theme.secondary, 68, 0);
+  // Artist at F_REG (7px) - aligned with title at x=52, below title
+  uiTextFit(52, 46, state.musicArtist[0] ? state.musicArtist : "Unknown artist", F_REG, theme.secondary, 74, 0);
 
   // Current lyric (same font for all lines).
   if (state.lyricCur[0] != '\0') {
