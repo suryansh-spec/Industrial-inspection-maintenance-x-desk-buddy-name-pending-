@@ -336,19 +336,28 @@ static int uiW(const char* s, uint8_t fid) {
 }
 // align: 0 left, 1 centre, 2 right. y is the text baseline.
 static void uiText(int x, int y, const char* s, uint8_t fid, uint16_t col, int align);
-static void uiTextAA(int x, int y, const char* s, uint8_t fid, uint16_t col, int align = 0) {
-  if (!s || !s[0]) return;
-  const GFXfont* font = uiFace(fid);
-  if (!font) { uiText(x, y, s, fid, col, align); return; }
 
-  // Use Adafruit GFX to get text bounds for alignment
+// Draws 4-bit anti-aliased glyphs into any GFXcanvas16, optionally clipped to
+// a horizontal window [clipX0, clipX1]. y is the text baseline. The canvas
+// dimensions are queried from the object so this works for the main sprite and
+// for the marquee target alike.
+static void uiTextAARect(GFXcanvas16* cv, int x, int y, const char* s, uint8_t fid,
+                         uint16_t col, int align, int clipX0, int clipX1) {
+  if (!cv || !s || !s[0]) return;
+  const GFXfont* font = uiFace(fid);
+  uint16_t* buf = cv->getBuffer();
+  if (!font || !buf) return;
+  const int cw = cv->width(), ch = cv->height();
+
+  // Use Adafruit GFX to get text bounds for alignment.
   int16_t x1, y1; uint16_t w, h;
-  sprite.setFont(font); sprite.setTextSize(1); sprite.setTextColor(col);
-  sprite.getTextBounds(s, 0, 0, &x1, &y1, &w, &h);
+  cv->setFont(font); cv->setTextSize(1); cv->setTextColor(col);
+  cv->getTextBounds(s, 0, 0, &x1, &y1, &w, &h);
   int px = (align == 0) ? x - x1 : (align == 1 ? x - (int)w / 2 - x1 : x - (int)w - x1);
 
   int cursorX = px;
   uint16_t fg = col;
+  uint8_t* bitmap = (uint8_t*)font->bitmap;
 
   for (const char* p = s; *p; p++) {
     if (*p < font->first || *p > font->last) continue;
@@ -359,52 +368,38 @@ static void uiTextAA(int x, int y, const char* s, uint8_t fid, uint16_t col, int
     int8_t yo = g->yOffset;
     uint16_t bo = g->bitmapOffset;
     uint8_t xa = g->xAdvance;
-    uint8_t* bitmap = (uint8_t*)font->bitmap;
 
     if (gw > 0 && gh > 0) {
-      // Draw 4-bit grayscale glyph with alpha blending
+      // Each row is padded to a whole byte by font_converter_aa.py, so the
+      // nibble order restarts at every row: even column => high nibble.
+      const int stride = (gw + 1) / 2;
       for (int row = 0; row < gh; row++) {
-        for (int col = 0; col < gw; col++) {
-          // Read 4-bit grayscale value (2 pixels per byte)
-          int byteIdx = bo + row * ((gw + 1) / 2) + (col / 2);
-          uint8_t packed = bitmap[byteIdx];
-          uint8_t gray;
-          if ((row * gw + col) % 2 == 0) {
-            gray = (packed >> 4) & 0x0F;
-          } else {
-            gray = packed & 0x0F;
-          }
-          if (gray == 0) continue; // Skip transparent pixels
+        int sy = y + yo + row;
+        if (sy < 0 || sy >= ch) continue;
+        for (int c = 0; c < gw; c++) {
+          int sx = cursorX + xo + c;
+          if (sx < 0 || sx >= cw || sx < clipX0 || sx > clipX1) continue;
+          uint8_t packed = bitmap[bo + row * stride + (c >> 1)];
+          uint8_t gray = (c & 1) ? (packed & 0x0F) : ((packed >> 4) & 0x0F);
+          if (!gray) continue;
 
-          // Alpha blend: result = bg * (1 - alpha) + fg * alpha
-          uint8_t alpha = gray; // 0-15
-          int sx = cursorX + xo + col;
-          int sy = y + yo + row;
-          if (sx < 0 || sy < 0 || sx >= UI_W || sy >= UI_H) continue;
-
-          uint16_t bg = uiFb()[sy * UI_W + sx];
-
-          // Unpack RGB565
-          uint8_t r_bg = (bg >> 11) & 0x1F;
-          uint8_t g_bg = (bg >> 5) & 0x3F;
-          uint8_t b_bg = bg & 0x1F;
-          uint8_t r_fg = (fg >> 11) & 0x1F;
-          uint8_t g_fg = (fg >> 5) & 0x3F;
-          uint8_t b_fg = fg & 0x1F;
-
-          // Blend
-          uint8_t r = (r_bg * (15 - alpha) + r_fg * alpha) / 15;
-          uint8_t g = (g_bg * (15 - alpha) + g_fg * alpha) / 15;
-          uint8_t b = (b_bg * (15 - alpha) + b_fg * alpha) / 15;
-
-          // Repack
-          uint16_t result = (r << 11) | (g << 5) | b;
-          uiFb()[sy * UI_W + sx] = result;
+          uint16_t bgp = buf[sy * cw + sx];
+          int r  = (((bgp >> 11) & 0x1F) * (15 - gray) + ((fg >> 11) & 0x1F) * gray) / 15;
+          int g2 = (((bgp >> 5)  & 0x3F) * (15 - gray) + ((fg >> 5)  & 0x3F) * gray) / 15;
+          int b  = (( bgp        & 0x1F) * (15 - gray) + ( fg        & 0x1F) * gray) / 15;
+          buf[sy * cw + sx] = (uint16_t)((r << 11) | (g2 << 5) | b);
         }
       }
     }
     cursorX += xa;
   }
+}
+
+static void uiTextAA(int x, int y, const char* s, uint8_t fid, uint16_t col, int align = 0) {
+  if (!s || !s[0]) return;
+  const GFXfont* font = uiFace(fid);
+  if (!font) { uiText(x, y, s, fid, col, align); return; }
+  uiTextAARect(&sprite, x, y, s, fid, col, align, 0, UI_W - 1);
 }
 
 static void uiText(int x, int y, const char* s, uint8_t fid, uint16_t col, int align = 0) {
@@ -445,6 +440,18 @@ static void uiMarquee(int x, int baseline, int w, const char* s, uint8_t fid,
   int tw = uiW(t, fid);
   uint8_t sc = uiScale(fid);
   if (tw <= w) { uiText(center ? x + w / 2 : x, baseline, t, fid, col, center ? 1 : 0); return; }
+  // 4-bit AA fonts must never go through the 1-bit GFXcanvas16 print() path
+  // below (it reads 4-bit glyph data as a 1-bit bitmap and scatters it).
+  // Scroll them straight into the framebuffer under a clipped window instead.
+  if (uiFontFaceMode >= 4) {
+    int loop = tw + 24;
+    unsigned long period = (unsigned long)loop * 30 + 1200, ph = uiNowMs % period;
+    int off = ph < 1200 ? 0 : (int)((ph - 1200) / 30);
+    for (int k = 0; k < 2; k++) {
+      uiTextAARect(&sprite, x - off + k * loop, baseline, t, fid, col, 0, x, x + w - 1);
+    }
+    return;
+  }
   if (!uiMq) uiMq = new GFXcanvas16(UI_MQ_W, UI_MQ_H);
   if (!uiMq || !uiMq->getBuffer() || w > UI_MQ_W) { uiTextFit(x, baseline, t, fid, col, w); return; }
   uiMq->fillScreen(bg);
