@@ -880,11 +880,15 @@ void drawMusicPage() {
   uiMarquee(52, 30, 68, state.musicTitle, F_BOLD, theme.text, theme.bg, true);
   uiTextFit(52, 46, state.musicArtist[0] ? state.musicArtist : "Unknown artist", F_REG, theme.secondary, 68, 0);
 
-  // Current lyric line.
-  if (state.lyricsAvailable && state.lyricCur[0] != '\0') {
-    uiTextFit(8, 74, state.lyricCur, F_REG, uiFade(accent, 0.9f), 112, 1);
-  } else if (state.lyricCur[0] != '\0') {
-    uiTextFit(8, 74, state.lyricCur, F_REG, uiFade(theme.text, 0.7f), 112, 1);
+  // Current lyric (wrapped to use available space).
+  if (state.lyricCur[0] != '\0') {
+    char ly[3][40];
+    int n = uiWrap(state.lyricCur, F_REG, 112, ly, 3);
+    uint16_t lcol = state.lyricsAvailable ? uiFade(accent, 0.95f) : uiFade(theme.text, 0.7f);
+    int ly0 = 66;
+    for (int i = 0; i < n; i++) {
+      uiTextFit(8, ly0 + i * 11, ly[i], F_REG, lcol, 112, 0);
+    }
   }
 
   // Progress bar.
