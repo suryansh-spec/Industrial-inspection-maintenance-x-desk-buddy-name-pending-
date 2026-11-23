@@ -8,8 +8,8 @@
 
 #include <math.h>
 
-#define PIN_LED_DATA    2
-#define LED_DEFAULT_COUNT 24
+#define PIN_LED_DATA    48
+#define LED_DEFAULT_COUNT 16
 #define LED_MAX_COUNT   120
 #define LED_FRAME_MS    33
 

@@ -110,8 +110,8 @@ effects; else → ambient/status effects. Manual override via command.
 ### New LED output (Strategy B) — recommended
 | Signal | GPIO | Notes |
 |---|---|---|
-| LED data (WS2812B/NeoPixel) | **GPIO 2** | Free, not strapping; RMT-capable. Use 300–500 Ω series resistor. |
-| Alt data pin | GPIO 38 | If GPIO 2 is unavailable |
+| LED data (WS2812B/NeoPixel, 16 LEDs) | **GPIO 48** | ARGB ring/strip. Use 300–500 Ω series resistor. |
+| Alt data pin | GPIO 2 | If GPIO 48 is unavailable |
 | Extra strips (optional) | GPIO 39–42, 47 | One RMT channel per output |
 
 Avoid: GPIO 0,3,45,46 (strapping), 19/20 (USB), 26–32 (flash), 33–37 (PSRAM),

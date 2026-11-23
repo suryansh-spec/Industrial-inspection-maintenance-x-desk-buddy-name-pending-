@@ -31,7 +31,7 @@ This folder is intentionally separate from the old PlatformIO experiments in
 | I2S mic (INMP441 / ICS-43434) | SCK / BCLK | GPIO5 |
 | I2S mic | WS / LRCLK | GPIO6 |
 | I2S mic | SD / DOUT | GPIO7 |
-| Addressable LED strip (optional) | Data | GPIO2 (alt GPIO38) |
+| Addressable LED strip (optional, 16 LEDs) | Data | GPIO48 (alt GPIO2) |
 
 I2C addresses: OLED `0x3C`, BME280 `0x77` (with `0x76` fallback), ADXL345
 `0x53`. Buttons use `INPUT_PULLUP` and are active LOW. The I2S mic runs at
