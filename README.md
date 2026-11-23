@@ -64,6 +64,7 @@ Switch modes with the **MODE button** or via web panel / API.
 | Speaker (PWM) | GPIO 21 |
 | Battery ADC | GPIO 1 |
 | I2S Mic (INMP441) | SCK=5, WS=6, SD=7 |
+| Addressable LED strip (optional, WS2812B) | Data=GPIO 2 (alt 38), ext 5 V + common GND |
 
 ### Requirements
 - Arduino IDE with ESP32 board package
