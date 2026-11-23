@@ -790,6 +790,7 @@ void drawHome() {
 // Music
 // ----------------------------------------------------------------------------
 static float uiPlayT = 1.0f, uiProg = 0.0f;
+static unsigned long uiProgressCompleteMs = 0;
 static char  uiLastTitle[64] = "";
 
 void drawMusicPage() {
@@ -891,13 +892,184 @@ void drawMusicPage() {
     }
   }
 
-  // Progress bar.
+  // Perimeter progress indicator around the album artwork.
   float target = state.musicDuration > 0 ? uiClamp01((float)state.musicProgress / state.musicDuration) : 0.0f;
-  if (uiProg < 0) uiProg = target;
+  if (uiProg < 0) uiProg = 0.0f;
+  // Reset on new track.
+  if (strcmp(uiLastTitle, state.musicTitle) != 0) {
+    strncpy(uiLastTitle, state.musicTitle, sizeof(uiLastTitle) - 1);
+    uiLastTitle[sizeof(uiLastTitle) - 1] = 0;
+    uiProg = 0.0f;
+    uiProgressCompleteMs = 0;
+  }
   uiSmooth(uiProg, target, 6.0f);
-  uiCard(8, 92, 112, 4, 2, uiTrackCol(), uiTrackCol(), 0);
-  if (uiProg > 0.002f) uiCard(8, 92, fmaxf(4.0f, 112 * uiProg), 4, 2, accent, accent, 0);
-  uiDisc(8 + 112 * uiProg, 94, 3.4f, theme.text);
+  if (uiProg > 0.999f) {
+    uiProg = 1.0f;
+    if (uiProgressCompleteMs == 0) uiProgressCompleteMs = millis();
+  } else {
+    uiProgressCompleteMs = 0;
+  }
+
+  // Artwork container (must match cover draw above).
+  const int artX = 8, artY = 22, artW = 40, artH = 40;
+  const int margin = 4;
+  const int rx = artX - margin, ry = artY - margin;
+  const int rw = artW + margin * 2, rh = artH + margin * 2;
+  const int cr = 6; // corner radius
+
+  // Configurable style (defaults).
+  const uint16_t baseCol = 0x4208;   // dim blue/grey
+  const uint16_t progCol = 0x3EDF;   // cyan #39D9FF
+  const uint16_t glowCol = 0x1D9F;   // darker cyan glow
+  const uint16_t endCol  = 0xFFFF;   // white leading endpoint
+  const int borderThick = 2;
+  const int glowLayers = 2;
+  const int endSize = 3;
+
+  // Perimeter length of rounded rect.
+  float perim = 2.0f * (rw + rh) - 8.0f * cr + 2.0f * 3.14159265f * cr;
+
+  // Helper lambda to get point along perimeter at distance s (0..perim).
+  auto perimPoint = [&](float s, float* px, float* py) {
+    // normalize
+    while (s < 0) s += perim;
+    while (s > perim) s -= perim;
+    float cum = 0;
+    // Segment lengths
+    float lArc = 1.5707963f * cr; // quarter circle
+    float lTop = (float)(rw - 2 * cr);
+    float lRight = (float)(rh - 2 * cr);
+    float lBottom = (float)(rw - 2 * cr);
+    float lLeft = (float)(rh - 2 * cr);
+    // 1: top-left arc (from left point to top point), clockwise
+    if (s < lArc) {
+      float a = 3.14159265f - (s / lArc) * 1.5707963f; // pi -> pi/2
+      *px = (rx + cr) + cosf(a) * cr;
+      *py = (ry + cr) + sinf(a) * cr;
+      return;
+    }
+    cum += lArc;
+    // 2: top edge
+    if (s < cum + lTop) {
+      float t = (s - cum) / (lTop > 0 ? lTop : 1);
+      *px = (rx + cr) + t * lTop;
+      *py = (float)ry;
+      return;
+    }
+    cum += lTop;
+    // 3: top-right arc
+    if (s < cum + lArc) {
+      float a = 1.5707963f - ((s - cum) / lArc) * 1.5707963f; // pi/2 -> 0
+      *px = (rx + rw - cr) + cosf(a) * cr;
+      *py = (ry + cr) + sinf(a) * cr;
+      return;
+    }
+    cum += lArc;
+    // 4: right edge
+    if (s < cum + lRight) {
+      float t = (s - cum) / (lRight > 0 ? lRight : 1);
+      *px = (float)(rx + rw);
+      *py = (ry + cr) + t * lRight;
+      return;
+    }
+    cum += lRight;
+    // 5: bottom-right arc
+    if (s < cum + lArc) {
+      float a = 0.0f - ((s - cum) / lArc) * 1.5707963f; // 0 -> -pi/2
+      *px = (rx + rw - cr) + cosf(a) * cr;
+      *py = (ry + rh - cr) + sinf(a) * cr;
+      return;
+    }
+    cum += lArc;
+    // 6: bottom edge
+    if (s < cum + lBottom) {
+      float t = (s - cum) / (lBottom > 0 ? lBottom : 1);
+      *px = (rx + rw - cr) - t * lBottom;
+      *py = (float)(ry + rh);
+      return;
+    }
+    cum += lBottom;
+    // 7: bottom-left arc
+    if (s < cum + lArc) {
+      float a = -1.5707963f - ((s - cum) / lArc) * 1.5707963f; // -pi/2 -> -pi
+      *px = (rx + cr) + cosf(a) * cr;
+      *py = (ry + rh - cr) + sinf(a) * cr;
+      return;
+    }
+    cum += lArc;
+    // 8: left edge
+    {
+      float t = (s - cum) / (lLeft > 0 ? lLeft : 1);
+      *px = (float)rx;
+      *py = (ry + rh - cr) - t * lLeft;
+    }
+  };
+
+  // Draw base outline (full perimeter, dim).
+  float step = 1.0f;
+  for (float d = 0; d < perim; d += step) {
+    float px, py;
+    perimPoint(d, &px, &py);
+    int ix = (int)(px + 0.5f);
+    int iy = (int)(py + 0.5f);
+    if (ix >= 0 && ix < UI_W && iy >= 0 && iy < UI_H) {
+      uiPx(ix, iy, baseCol, 255);
+      // thickness
+      if (ix + 1 < UI_W) uiPx(ix + 1, iy, baseCol, 255);
+    }
+  }
+
+  // Draw progress segment.
+  float progDist = perim * uiProg;
+  // glow layers
+  for (int g = glowLayers; g >= 1; g--) {
+    uint8_t a = (uint8_t)(40 + 40 * (glowLayers - g + 1));
+    for (float d = 0; d <= progDist; d += step) {
+      float px, py;
+      perimPoint(d, &px, &py);
+      int ix = (int)(px + 0.5f);
+      int iy = (int)(py + 0.5f);
+      for (int oy = -g; oy <= g; oy++) {
+        for (int ox = -g; ox <= g; ox++) {
+          int x = ix + ox, y = iy + oy;
+          if (x >= 0 && x < UI_W && y >= 0 && y < UI_H) {
+            uiPx(x, y, glowCol, a);
+          }
+        }
+      }
+    }
+  }
+  // main progress line
+  for (float d = 0; d <= progDist; d += step) {
+    float px, py;
+    perimPoint(d, &px, &py);
+    int ix = (int)(px + 0.5f);
+    int iy = (int)(py + 0.5f);
+    for (int t = 0; t < borderThick; t++) {
+      if (ix + t < UI_W) uiPx(ix + t, iy, progCol, 255);
+      if (iy + t < UI_H) uiPx(ix, iy + t, progCol, 255);
+    }
+  }
+
+  // Leading endpoint.
+  if (uiProg > 0.001f && uiProg < 0.999f) {
+    float px, py;
+    perimPoint(progDist, &px, &py);
+    int ix = (int)(px + 0.5f);
+    int iy = (int)(py + 0.5f);
+    for (int dy = -endSize; dy <= endSize; dy++) {
+      for (int dx = -endSize; dx <= endSize; dx++) {
+        if (dx * dx + dy * dy <= endSize * endSize) {
+          int x = ix + dx, y = iy + dy;
+          if (x >= 0 && x < UI_W && y >= 0 && y < UI_H) {
+            uiPx(x, y, endCol, 255);
+          }
+        }
+      }
+    }
+  }
+
+  // Completion hold: if complete, full perimeter already drawn (progDist=perim).
 
   char a[12], b[12]; uiFmtTime(state.musicProgress, a, sizeof(a)); uiFmtTime(state.musicDuration, b, sizeof(b));
   uiText(8, 106, a, F_REG, theme.secondary, 0);
