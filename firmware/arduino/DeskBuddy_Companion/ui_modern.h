@@ -795,6 +795,8 @@ static char  uiLastTitle[64] = "";
 
 void drawMusicPage() {
   uint16_t accent = (uiCoverAccent && state.musicTitle[0]) ? uiCoverAccent : theme.accent;
+  uint8_t savedFace = uiFontFaceMode;
+  bool savedAA = uiFontAA;
   uint16_t* fb = uiFb();
 
   // --- FFT visualizer as full-page background ---
@@ -877,18 +879,21 @@ void drawMusicPage() {
     uiCard(8, 22, C, C, 6, uiLerp(theme.bg, accent, 70), accent, 60);
   }
 
-  // Title + artist to the right of cover.
+  // Title (Inter SemiBold ~12px) + artist (Inter Regular ~9px).
+  uiFontFaceMode = 5; uiFontAA = true;
   uiMarquee(52, 30, 68, state.musicTitle, F_BOLD, theme.text, theme.bg, true);
   uiMarquee(52, 46, 68, state.musicArtist[0] ? state.musicArtist : "Unknown artist", F_REG, theme.secondary, theme.bg, false);
 
-  // Current lyric (wrapped to use available space).
+  // Current lyric (Roboto Condensed: active 11-12px, upcoming 9-10px).
   if (state.lyricCur[0] != '\0') {
     char ly[3][40];
+    uiFontFaceMode = 4; uiFontAA = true;
     int n = uiWrap(state.lyricCur, F_REG, 112, ly, 3);
     uint16_t lcol = state.lyricsAvailable ? uiFade(accent, 0.95f) : uiFade(theme.text, 0.7f);
     int ly0 = 76;
     for (int i = 0; i < n; i++) {
-      uiTextFit(8, ly0 + i * 11, ly[i], F_REG, lcol, 112, 0);
+      uint8_t fid = (i == 0) ? F_BOLD : F_REG;
+      uiTextFit(8, ly0 + i * 12, ly[i], fid, lcol, 112, 0);
     }
   }
 
@@ -1075,12 +1080,16 @@ void drawMusicPage() {
   // Completion hold: if complete, full perimeter already drawn (progDist=perim).
 
   char a[12], b[12]; uiFmtTime(state.musicProgress, a, sizeof(a)); uiFmtTime(state.musicDuration, b, sizeof(b));
+  uiFontFaceMode = 7; uiFontAA = true; // JetBrains Mono 9px
   uiText(8, 106, a, F_REG, theme.secondary, 0);
   uiText(120, 106, b, F_REG, theme.secondary, 2);
 
   char hint[32];
   snprintf(hint, sizeof(hint), state.musicPlaying ? "Playing" : "Paused");
+  uiFontFaceMode = 0; uiFontAA = false; // Pixel (Org_01) 8px
   uiText(64, 124, hint, F_REG, state.musicPlaying ? theme.success : theme.warning, 1);
+  uiFontFaceMode = savedFace;
+  uiFontAA = savedAA;
   uiPageDots();
 }
 
