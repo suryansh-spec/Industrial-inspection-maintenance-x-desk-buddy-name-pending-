@@ -623,6 +623,7 @@ InternalCanvas16 sprite(128, 160);
 #if defined(HAS_U8G2_GFX)
 U8G2_FOR_ADAFRUIT_GFX u8g2gfx;
 #endif
+#define UI_FORCE_FULL_PUSH 1
 #include "ui_modern.h"
 
 // ----------------------------------------------------------------------------

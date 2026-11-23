@@ -318,8 +318,19 @@ static void uiClean(char* dst, size_t sz, const char* src) {
 
 static int uiW(const char* s, uint8_t fid) {
   if (!s || !s[0]) return 0;
+  // For TTF fonts (4-bit AA), measure using glyph xAdvance directly.
+  if (uiFontFaceMode >= 4) {
+    const GFXfont* font = uiFace(uiFontFaceMode);
+    int w = 0;
+    for (const char* p = s; *p; p++) {
+      if (*p < font->first || *p > font->last) continue;
+      const GFXglyph* g = &font->glyph[*p - font->first];
+      w += g->xAdvance;
+    }
+    return w * uiScale(fid);
+  }
   int16_t x1, y1; uint16_t w, h;
-  sprite.setFont(uiFace(fid)); sprite.setTextSize(uiScale(fid));
+  sprite.setFont(uiFace(uiFontFaceMode)); sprite.setTextSize(uiScale(fid));
   sprite.getTextBounds(s, 0, 0, &x1, &y1, &w, &h);
   return (int)w;
 }
@@ -398,12 +409,14 @@ static void uiTextAA(int x, int y, const char* s, uint8_t fid, uint16_t col, int
 
 static void uiText(int x, int y, const char* s, uint8_t fid, uint16_t col, int align = 0) {
   if (!s || !s[0]) return;
-  if (uiFontAA) {
+  // TTF fonts (mode >= 4) are 4-bit AA; always use uiTextAA for them.
+  // Pixel font (mode 0-3) uses sprite.print (1-bit).
+  if (uiFontAA || uiFontFaceMode >= 4) {
     uiTextAA(x, y, s, fid, col, align);
     return;
   }
   int16_t x1, y1; uint16_t w, h;
-  sprite.setFont(uiFace(fid)); sprite.setTextSize(uiScale(fid)); sprite.setTextColor(col);
+  sprite.setFont(uiFace(uiFontFaceMode)); sprite.setTextSize(uiScale(fid)); sprite.setTextColor(col);
   sprite.getTextBounds(s, 0, 0, &x1, &y1, &w, &h);
   int px = (align == 0) ? x - x1 : (align == 1 ? x - (int)w / 2 - x1 : x - (int)w - x1);
   sprite.setCursor(px, y);
@@ -887,11 +900,11 @@ void drawMusicPage() {
     uiCard(8, 22, C, C, 6, uiLerp(theme.bg, accent, 70), accent, 60);
   }
 
-  // Title + artist (configurable fonts).
-  uiFontFaceMode = uiMusicTitleFont; uiFontAA = uiMusicTitleAA;
-  uiMarquee(52, 30, 68, state.musicTitle, F_BOLD, theme.text, theme.bg, true);
-  uiFontFaceMode = uiMusicArtistFont; uiFontAA = uiMusicArtistAA;
-  uiMarquee(52, 46, 68, state.musicArtist[0] ? state.musicArtist : "Unknown artist", F_REG, theme.secondary, theme.bg, false);
+  // Title + artist (TTF fonts with auto-AA).
+  uiFontFaceMode = uiMusicTitleFont; uiFontAA = true;
+  uiTextFit(52, 30, state.musicTitle, F_BOLD, theme.text, 68, 1);
+  uiFontFaceMode = uiMusicArtistFont; uiFontAA = true;
+  uiTextFit(52, 46, state.musicArtist[0] ? state.musicArtist : "Unknown artist", F_REG, theme.secondary, 68, 0);
 
   // Current lyric (same font for all lines).
   if (state.lyricCur[0] != '\0') {
@@ -1088,13 +1101,13 @@ void drawMusicPage() {
   // Completion hold: if complete, full perimeter already drawn (progDist=perim).
 
   char a[12], b[12]; uiFmtTime(state.musicProgress, a, sizeof(a)); uiFmtTime(state.musicDuration, b, sizeof(b));
-  uiFontFaceMode = uiMusicTimerFont; uiFontAA = uiMusicTimerAA;
+  uiFontFaceMode = uiMusicTimerFont; uiFontAA = true;
   uiText(8, 106, a, F_REG, theme.secondary, 0);
   uiText(120, 106, b, F_REG, theme.secondary, 2);
 
   char hint[32];
   snprintf(hint, sizeof(hint), state.musicPlaying ? "Playing" : "Paused");
-  uiFontFaceMode = uiMusicStatusFont; uiFontAA = uiMusicStatusAA;
+  uiFontFaceMode = uiMusicStatusFont; uiFontAA = true;
   uiText(64, 124, hint, F_REG, state.musicPlaying ? theme.success : theme.warning, 1);
   uiFontFaceMode = savedFace;
   uiFontAA = savedAA;
