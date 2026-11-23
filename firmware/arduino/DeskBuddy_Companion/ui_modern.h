@@ -20,14 +20,14 @@
 // ============================================================================
 #pragma once
 
-#include <Fonts/Org_01.h>
-#include <Fonts/TomThumb.h>
-#include <Fonts/Picopixel.h>
-#include <Fonts/Tiny3x3a2pt7b.h>
-#include <Fonts/Roboto_8.h>
-#include <Fonts/Inter_8.h>
-#include <Fonts/Montserrat_8.h>
-#include <Fonts/JetBrainsMono_8.h>
+#include "Fonts/Org_01.h"
+#include "Fonts/TomThumb.h"
+#include "Fonts/Picopixel.h"
+#include "Fonts/Tiny3x3a2pt7b.h"
+#include "Fonts/Roboto_8.h"
+#include "Fonts/Inter_8.h"
+#include "Fonts/Montserrat_8.h"
+#include "Fonts/JetBrainsMono_8.h"
 #include <esp_heap_caps.h>
 
 #define UI_W 128
