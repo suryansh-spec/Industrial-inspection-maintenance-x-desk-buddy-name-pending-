@@ -893,7 +893,7 @@ void drawMusicPage() {
   uiFontFaceMode = uiMusicArtistFont; uiFontAA = uiMusicArtistAA;
   uiMarquee(52, 46, 68, state.musicArtist[0] ? state.musicArtist : "Unknown artist", F_REG, theme.secondary, theme.bg, false);
 
-  // Current lyric (configurable fonts).
+  // Current lyric (same font for all lines).
   if (state.lyricCur[0] != '\0') {
     char ly[3][40];
     uiFontFaceMode = uiMusicActiveLyricFont; uiFontAA = uiMusicActiveLyricAA;
@@ -901,10 +901,7 @@ void drawMusicPage() {
     uint16_t lcol = state.lyricsAvailable ? uiFade(accent, 0.95f) : uiFade(theme.text, 0.7f);
     int ly0 = 76;
     for (int i = 0; i < n; i++) {
-      if (i == 0) { uiFontFaceMode = uiMusicActiveLyricFont; uiFontAA = uiMusicActiveLyricAA; }
-      else { uiFontFaceMode = uiMusicUpcomingLyricFont; uiFontAA = uiMusicUpcomingLyricAA; }
-      uint8_t fid = (i == 0) ? F_BOLD : F_REG;
-      uiTextFit(8, ly0 + i * 12, ly[i], fid, lcol, 112, 0);
+      uiTextFit(8, ly0 + i * 11, ly[i], F_REG, lcol, 112, 0);
     }
   }
 
