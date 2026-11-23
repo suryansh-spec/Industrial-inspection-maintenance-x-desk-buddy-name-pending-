@@ -25,9 +25,17 @@
 #include "Fonts/Picopixel.h"
 #include "Fonts/Tiny3x3a2pt7b.h"
 #include "Fonts/Roboto_8.h"
+#include "Fonts/Roboto_14.h"
+#include "Fonts/Roboto_21.h"
 #include "Fonts/Inter_8.h"
+#include "Fonts/Inter_14.h"
+#include "Fonts/Inter_21.h"
 #include "Fonts/Montserrat_8.h"
+#include "Fonts/Montserrat_14.h"
+#include "Fonts/Montserrat_21.h"
 #include "Fonts/JetBrainsMono_8.h"
+#include "Fonts/JetBrainsMono_14.h"
+#include "Fonts/JetBrainsMono_21.h"
 #include <esp_heap_caps.h>
 
 #define UI_W 128
@@ -57,22 +65,7 @@
 // Set by the `set_font` command from the web panel.
 static uint8_t uiFontFaceMode = 0;
 
-static inline const GFXfont* uiFace(uint8_t id) {
-  (void)id;
-  // All faces use the same integer scale steps (1x, 2x, 3x), so layout
-  // coordinates remain valid when switching fonts.
-  switch (uiFontFaceMode) {
-    case 1: return &TomThumb;
-    case 2: return &Picopixel;
-    case 3: return &Tiny3x3a2pt7b;
-    case 4: return &Roboto_8;
-    case 5: return &Inter_8;
-    case 6: return &Montserrat_8;
-    case 7: return &JetBrainsMono_8;
-    default: return &Org_01;
-  }
-}
-static inline uint8_t uiScale(uint8_t id) {
+static inline uint8_t _uiScaleSteps(uint8_t id) {
   switch (id) {
     case F_BOLD:
     case F_BIG:  return 2;
@@ -80,7 +73,40 @@ static inline uint8_t uiScale(uint8_t id) {
     default:     return 1;
   }
 }
-static inline int uiLineH(uint8_t id) { return 7 * (int)uiScale(id); }
+
+static inline const GFXfont* uiFace(uint8_t id) {
+  uint8_t sc = _uiScaleSteps(id);
+  // For TTF-converted fonts (modes 4-7), return pre-scaled font
+  // instead of relying on setTextSize() which block-scales bitmap fonts.
+  switch (uiFontFaceMode) {
+    case 1: return &TomThumb;
+    case 2: return &Picopixel;
+    case 3: return &Tiny3x3a2pt7b;
+    case 4: // Roboto
+      return (sc == 1) ? &Roboto_8 : (sc == 2) ? &Roboto_14 : &Roboto_21;
+    case 5: // Inter
+      return (sc == 1) ? &Inter_8 : (sc == 2) ? &Inter_14 : &Inter_21;
+    case 6: // Montserrat
+      return (sc == 1) ? &Montserrat_8 : (sc == 2) ? &Montserrat_14 : &Montserrat_21;
+    case 7: // JetBrainsMono
+      return (sc == 1) ? &JetBrainsMono_8 : (sc == 2) ? &JetBrainsMono_14 : &JetBrainsMono_21;
+    default: return &Org_01;
+  }
+}
+
+static inline uint8_t uiScale(uint8_t id) {
+  // For TTF-converted fonts (modes 4-7), don't scale (font is already right size)
+  if (uiFontFaceMode >= 4) return 1;
+  return _uiScaleSteps(id);
+}
+
+static inline int uiLineH(uint8_t id) {
+  if (uiFontFaceMode >= 4) {
+    const GFXfont* f = uiFace(id);
+    return f->yAdvance;
+  }
+  return 7 * (int)uiScale(id);
+}
 
 // ----------------------------------------------------------------------------
 // Core state
