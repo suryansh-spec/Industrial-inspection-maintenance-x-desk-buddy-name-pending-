@@ -560,6 +560,8 @@ void applyState(JsonObjectConst payload);
 void applyNotification(JsonObjectConst payload);
 void applyPomodoro(JsonObjectConst payload);
 void applyMusic(JsonObjectConst payload);
+uint8_t fontModeFromName(const char* face);
+bool fontAAFromMode(uint8_t mode);
 void applyCommand(JsonObjectConst payload);
 
 void sendHeartbeat();
@@ -1457,6 +1459,16 @@ void handleBackendLine(const String& line) {
   } else if (strcmp(cmd, "led") == 0) {
     ledApplyCommand(payload);
     tftDirty = true;
+  } else if (strcmp(cmd, "set_fonts") == 0) {
+    const char* v;
+    v = payload["title"] | ""; if (v[0]) { uiMusicTitleFont = fontModeFromName(v); uiMusicTitleAA = fontAAFromMode(uiMusicTitleFont); }
+    v = payload["artist"] | ""; if (v[0]) { uiMusicArtistFont = fontModeFromName(v); uiMusicArtistAA = fontAAFromMode(uiMusicArtistFont); }
+    v = payload["active_lyric"] | ""; if (v[0]) { uiMusicActiveLyricFont = fontModeFromName(v); uiMusicActiveLyricAA = fontAAFromMode(uiMusicActiveLyricFont); }
+    v = payload["upcoming_lyric"] | ""; if (v[0]) { uiMusicUpcomingLyricFont = fontModeFromName(v); uiMusicUpcomingLyricAA = fontAAFromMode(uiMusicUpcomingLyricFont); }
+    v = payload["timer"] | ""; if (v[0]) { uiMusicTimerFont = fontModeFromName(v); uiMusicTimerAA = fontAAFromMode(uiMusicTimerFont); }
+    v = payload["status"] | ""; if (v[0]) { uiMusicStatusFont = fontModeFromName(v); uiMusicStatusAA = fontAAFromMode(uiMusicStatusFont); }
+    tftDirty = true;
+    tftFullRedraw = true;
   } else if (strcmp(cmd, "get_status") == 0) {
     sendHeartbeat();
   } else if (strcmp(cmd, "get_sensors") == 0) {
@@ -1684,6 +1696,22 @@ void applyPomodoro(JsonObjectConst p) {
     resetPomodoro();
   }
   tftDirty = true;
+}
+
+uint8_t fontModeFromName(const char* face) {
+  if (face == nullptr) return 0;
+  if (strcmp(face, "compact") == 0) return 1;
+  if (strcmp(face, "picopixel") == 0) return 2;
+  if (strcmp(face, "tiny3x3") == 0) return 3;
+  if (strcmp(face, "roboto") == 0) return 4;
+  if (strcmp(face, "inter") == 0) return 5;
+  if (strcmp(face, "montserrat") == 0) return 6;
+  if (strcmp(face, "jetbrainsmono") == 0) return 7;
+  return 0;
+}
+
+bool fontAAFromMode(uint8_t mode) {
+  return mode >= 4;
 }
 
 void applyMusic(JsonObjectConst p) {

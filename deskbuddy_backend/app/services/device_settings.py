@@ -96,6 +96,14 @@ DEFAULTS: Dict[str, Any] = {
     "display": {
         "font_face": "pixel",          # pixel | compact | picopixel | tiny3x3 | roboto | inter | montserrat | jetbrainsmono
         "wallpaper_opacity": 150,      # 0..255 scrim toward the theme background
+        "music_fonts": {               # per-element fonts for the music page
+            "title": "inter",
+            "artist": "inter",
+            "active_lyric": "roboto",
+            "upcoming_lyric": "roboto",
+            "timer": "jetbrainsmono",
+            "status": "pixel",
+        },
     },
     "sleep_thresholds": {
         "sleepy_seconds": 30,
@@ -286,6 +294,9 @@ async def push_display(manager) -> None:
         "face": display.get("font_face", "pixel"),
         "opacity": int(display.get("wallpaper_opacity", 150)),
     })
+    mf = display.get("music_fonts") or {}
+    if isinstance(mf, dict) and mf:
+        await manager.send_command("set_fonts", mf)
 
 
 async def push_all(manager) -> None:

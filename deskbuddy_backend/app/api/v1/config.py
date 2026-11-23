@@ -243,6 +243,7 @@ async def get_display():
     return {
         "font_face": display.get("font_face", "pixel"),
         "wallpaper_opacity": int(display.get("wallpaper_opacity", 150)),
+        "music_fonts": display.get("music_fonts", {}) or {},
         "wallpaper": ds.has_wallpaper(),
         "fonts": [{"id": k, "label": v} for k, v in FONT_LABELS.items()],
     }
@@ -250,9 +251,16 @@ async def get_display():
 
 @router.put("/display")
 async def update_display(values: Dict[str, Any]):
-    allowed = {k: v for k, v in (values or {}).items() if k in ("font_face", "wallpaper_opacity")}
+    allowed = {k: v for k, v in (values or {}).items() if k in ("font_face", "wallpaper_opacity", "music_fonts")}
     if "font_face" in allowed and allowed["font_face"] not in VALID_FONT_FACES:
         raise HTTPException(status_code=400, detail=f"font_face must be one of {VALID_FONT_FACES}")
+    if "music_fonts" in allowed and isinstance(allowed["music_fonts"], dict):
+        current = (store.get("display") or {}).get("music_fonts", {}) or {}
+        cleaned = dict(current)
+        for key, val in allowed["music_fonts"].items():
+            if val in VALID_FONT_FACES:
+                cleaned[key] = val
+        allowed["music_fonts"] = cleaned
     if "wallpaper_opacity" in allowed:
         try:
             allowed["wallpaper_opacity"] = max(0, min(255, int(allowed["wallpaper_opacity"])))

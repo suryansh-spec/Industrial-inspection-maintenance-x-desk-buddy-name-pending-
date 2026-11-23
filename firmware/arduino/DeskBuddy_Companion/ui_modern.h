@@ -66,6 +66,14 @@
 static uint8_t uiFontFaceMode = 0;
 static bool    uiFontAA = false;  // true for 4-bit anti-aliased TTF fonts
 
+// Per-element font faces for the music page (face mode 0..7).
+static uint8_t uiMusicTitleFont = 5;      static bool uiMusicTitleAA = true;   // Inter
+static uint8_t uiMusicArtistFont = 5;     static bool uiMusicArtistAA = true;
+static uint8_t uiMusicActiveLyricFont = 4; static bool uiMusicActiveLyricAA = true; // Roboto
+static uint8_t uiMusicUpcomingLyricFont = 4; static bool uiMusicUpcomingLyricAA = true;
+static uint8_t uiMusicTimerFont = 7;      static bool uiMusicTimerAA = true;   // JetBrains Mono
+static uint8_t uiMusicStatusFont = 0;     static bool uiMusicStatusAA = false;  // Pixel
+
 static inline uint8_t _uiScaleSteps(uint8_t id) {
   switch (id) {
     case F_BOLD:
@@ -879,19 +887,22 @@ void drawMusicPage() {
     uiCard(8, 22, C, C, 6, uiLerp(theme.bg, accent, 70), accent, 60);
   }
 
-  // Title (Inter SemiBold ~12px) + artist (Inter Regular ~9px).
-  uiFontFaceMode = 5; uiFontAA = true;
+  // Title + artist (configurable fonts).
+  uiFontFaceMode = uiMusicTitleFont; uiFontAA = uiMusicTitleAA;
   uiMarquee(52, 30, 68, state.musicTitle, F_BOLD, theme.text, theme.bg, true);
+  uiFontFaceMode = uiMusicArtistFont; uiFontAA = uiMusicArtistAA;
   uiMarquee(52, 46, 68, state.musicArtist[0] ? state.musicArtist : "Unknown artist", F_REG, theme.secondary, theme.bg, false);
 
-  // Current lyric (Roboto Condensed: active 11-12px, upcoming 9-10px).
+  // Current lyric (configurable fonts).
   if (state.lyricCur[0] != '\0') {
     char ly[3][40];
-    uiFontFaceMode = 4; uiFontAA = true;
+    uiFontFaceMode = uiMusicActiveLyricFont; uiFontAA = uiMusicActiveLyricAA;
     int n = uiWrap(state.lyricCur, F_REG, 112, ly, 3);
     uint16_t lcol = state.lyricsAvailable ? uiFade(accent, 0.95f) : uiFade(theme.text, 0.7f);
     int ly0 = 76;
     for (int i = 0; i < n; i++) {
+      if (i == 0) { uiFontFaceMode = uiMusicActiveLyricFont; uiFontAA = uiMusicActiveLyricAA; }
+      else { uiFontFaceMode = uiMusicUpcomingLyricFont; uiFontAA = uiMusicUpcomingLyricAA; }
       uint8_t fid = (i == 0) ? F_BOLD : F_REG;
       uiTextFit(8, ly0 + i * 12, ly[i], fid, lcol, 112, 0);
     }
@@ -1080,13 +1091,13 @@ void drawMusicPage() {
   // Completion hold: if complete, full perimeter already drawn (progDist=perim).
 
   char a[12], b[12]; uiFmtTime(state.musicProgress, a, sizeof(a)); uiFmtTime(state.musicDuration, b, sizeof(b));
-  uiFontFaceMode = 7; uiFontAA = true; // JetBrains Mono 9px
+  uiFontFaceMode = uiMusicTimerFont; uiFontAA = uiMusicTimerAA;
   uiText(8, 106, a, F_REG, theme.secondary, 0);
   uiText(120, 106, b, F_REG, theme.secondary, 2);
 
   char hint[32];
   snprintf(hint, sizeof(hint), state.musicPlaying ? "Playing" : "Paused");
-  uiFontFaceMode = 0; uiFontAA = false; // Pixel (Org_01) 8px
+  uiFontFaceMode = uiMusicStatusFont; uiFontAA = uiMusicStatusAA;
   uiText(64, 124, hint, F_REG, state.musicPlaying ? theme.success : theme.warning, 1);
   uiFontFaceMode = savedFace;
   uiFontAA = savedAA;

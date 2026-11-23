@@ -1327,6 +1327,30 @@ function DeviceThemeEditor() {
         <p className="text-slate-500 text-xs mt-2">Stored on the PC and re-sent automatically whenever the device connects.</p>
       </div>
       <div className="card">
+        <h3 className="font-semibold mb-3">Music Page Fonts</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+          {['title','artist','active_lyric','upcoming_lyric','timer','status'].map(key => (
+            <div key={key}>
+              <label className="text-slate-400 block mb-1">{key.replace('_',' ')}</label>
+              <select className="px-2 py-1 w-full" value={(display.music_fonts && display.music_fonts[key]) || 'pixel'}
+                onChange={e => saveDisplay({ music_fonts: { ...(display.music_fonts||{}), [key]: e.target.value } })}>
+                {(display.fonts && display.fonts.length ? display.fonts : [
+                  { id: 'pixel', label: 'Pixel (Org_01)' },
+                  { id: 'compact', label: 'Compact (TomThumb)' },
+                  { id: 'picopixel', label: 'PicoPixel (6px)' },
+                  { id: 'tiny3x3', label: 'Tiny 3×3a (3px)' },
+                  { id: 'roboto', label: 'Roboto (8px)' },
+                  { id: 'inter', label: 'Inter (8px)' },
+                  { id: 'montserrat', label: 'Montserrat (8px)' },
+                  { id: 'jetbrainsmono', label: 'JetBrains Mono (8px)' },
+                ]).map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
+              </select>
+            </div>
+          ))}
+        </div>
+        <p className="text-slate-500 text-xs mt-2">Applied immediately to the music page.</p>
+      </div>
+      <div className="card">
         <h3 className="font-semibold mb-2">Live Preview (TFT)</h3>
         <div className="p-3 rounded-xl" style={{ background: theme.bg_color, color: theme.text_color, border: '1px solid ' + theme.secondary_color, fontFamily: 'monospace', fontSize: '12px' }}>
           <div style={{ background: theme.header_bg, color: theme.header_text, padding: '2px 4px', marginBottom: '4px', fontSize: '12px' }}>HEADER</div>
