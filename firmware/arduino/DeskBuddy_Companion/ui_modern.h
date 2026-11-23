@@ -886,7 +886,7 @@ void drawMusicPage() {
     char ly[3][40];
     int n = uiWrap(state.lyricCur, F_REG, 112, ly, 3);
     uint16_t lcol = state.lyricsAvailable ? uiFade(accent, 0.95f) : uiFade(theme.text, 0.7f);
-    int ly0 = 66;
+    int ly0 = 76;
     for (int i = 0; i < n; i++) {
       uiTextFit(8, ly0 + i * 11, ly[i], F_REG, lcol, 112, 0);
     }
@@ -1005,8 +1005,8 @@ void drawMusicPage() {
     }
   };
 
-  // Draw base outline (full perimeter, dim).
-  float step = 1.0f;
+  // Draw base outline (full perimeter, dim). Smaller step + 2x2 brush for continuity.
+  float step = 0.5f;
   for (float d = 0; d < perim; d += step) {
     float px, py;
     perimPoint(d, &px, &py);
@@ -1014,8 +1014,9 @@ void drawMusicPage() {
     int iy = (int)(py + 0.5f);
     if (ix >= 0 && ix < UI_W && iy >= 0 && iy < UI_H) {
       uiPx(ix, iy, baseCol, 255);
-      // thickness
       if (ix + 1 < UI_W) uiPx(ix + 1, iy, baseCol, 255);
+      if (iy + 1 < UI_H) uiPx(ix, iy + 1, baseCol, 255);
+      if (ix + 1 < UI_W && iy + 1 < UI_H) uiPx(ix + 1, iy + 1, baseCol, 255);
     }
   }
 
@@ -1045,9 +1046,11 @@ void drawMusicPage() {
     perimPoint(d, &px, &py);
     int ix = (int)(px + 0.5f);
     int iy = (int)(py + 0.5f);
-    for (int t = 0; t < borderThick; t++) {
-      if (ix + t < UI_W) uiPx(ix + t, iy, progCol, 255);
-      if (iy + t < UI_H) uiPx(ix, iy + t, progCol, 255);
+    for (int oy = 0; oy < borderThick; oy++) {
+      for (int ox = 0; ox < borderThick; ox++) {
+        int x = ix + ox, y = iy + oy;
+        if (x >= 0 && x < UI_W && y >= 0 && y < UI_H) uiPx(x, y, progCol, 255);
+      }
     }
   }
 
