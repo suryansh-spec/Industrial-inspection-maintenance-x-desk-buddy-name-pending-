@@ -18,9 +18,12 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.v1 import companion, config, desktop_tools, device, gaming, system, vibration, voice
+from app.api.v1 import companion, config, desktop_tools, device, gaming, plugins, system, vibration, voice
 from app.core.config import LOGS_DIR, settings
 from app.core.database import close_db, init_db
+from app.core.event_bus import event_bus
+from app.core.state_manager import state_manager
+from app.core.plugin_loader import PluginLoader
 from app.services import serial_manager as serial_state
 from app.services.calendar import calendar_service
 from app.services.companion import companion_service
@@ -103,6 +106,15 @@ async def lifespan(app: FastAPI):
             companion_service.activity.set_thresholds(store.get("sleep_thresholds") or {})
         except Exception:  # pragma: no cover - settings are optional
             logger.debug("Could not apply sleep thresholds", exc_info=True)
+
+    # Initialize plugin system
+    plugin_loader = PluginLoader(event_bus, state_manager, serial_state)
+    app.state.plugin_loader = plugin_loader
+    try:
+        await plugin_loader.start_all()
+        logger.info("Plugin system initialized: %d plugins", len(plugin_loader.plugins))
+    except Exception as exc:
+        logger.warning("Plugin system failed to initialize: %s", exc)
 
     # Background tasks
     _background_tasks.append(asyncio.create_task(ws_heartbeat_task()))
@@ -187,6 +199,7 @@ app.include_router(voice.router, prefix=settings.api_prefix)
 app.include_router(companion.router, prefix=settings.api_prefix)
 app.include_router(gaming.router, prefix=settings.api_prefix)
 app.include_router(config.router, prefix=settings.api_prefix)
+app.include_router(plugins.router, prefix=settings.api_prefix)
 
 # Serve web control panel
 import os
