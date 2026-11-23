@@ -355,7 +355,7 @@ static void uiTextAA(int x, int y, const char* s, uint8_t fid, uint16_t col, int
       for (int row = 0; row < gh; row++) {
         for (int col = 0; col < gw; col++) {
           // Read 4-bit grayscale value (2 pixels per byte)
-          int byteIdx = bo + (row * gw + col) / 2;
+          int byteIdx = bo + row * ((gw + 1) / 2) + (col / 2);
           uint8_t packed = bitmap[byteIdx];
           uint8_t gray;
           if ((row * gw + col) % 2 == 0) {
@@ -1536,6 +1536,7 @@ static void uiAllocTransitionBuffers() {
   }
 }
 
+void drawFontTestPage();
 static void uiRenderPage() {
   if (mode == MODE_INSPECTION) { drawInspectionPage(); return; }
   switch (page) {
@@ -1545,6 +1546,7 @@ static void uiRenderPage() {
     case PAGE_ENV: drawEnvPage(); break;
     case PAGE_NOTIFICATIONS: drawNotificationsPage(); break;
     case PAGE_POMODORO: drawPomodoroPage(); break;
+    case PAGE_FONT_TEST: drawFontTestPage(); break;
     case PAGE_HOME:
     default: drawHome(); break;
   }
@@ -1592,6 +1594,53 @@ static const uint16_t* uiFrame(unsigned long now) {
   uiTransActive = false;
   return uiFb();
 }
+
+#if defined(HAS_U8G2_GFX)
+void drawFontTestPage() {
+  uiBackground(theme.bg, 8);
+  uiTopBar("Font Test");
+
+  u8g2gfx.setForegroundColor(theme.text);
+  u8g2gfx.setBackgroundColor(theme.bg);
+  u8g2gfx.setFontMode(1);
+
+  const uint8_t* fonts[6] = {
+    u8g2_font_6x12_tf,
+    u8g2_font_7x14_tf,
+    u8g2_font_helvR08_tf,
+    u8g2_font_helvR10_tf,
+    u8g2_font_helvB10_tf,
+    u8g2_font_profont10_tf
+  };
+  const char* names[6] = {
+    "u8g2_font_6x12_tf",
+    "u8g2_font_7x14_tf",
+    "u8g2_font_helvR08_tf",
+    "u8g2_font_helvR10_tf",
+    "u8g2_font_helvB10_tf",
+    "u8g2_font_profont10_tf"
+  };
+
+  int y = 24;
+  for (int i = 0; i < 6; i++) {
+    u8g2gfx.setFont(fonts[i]);
+    u8g2gfx.drawStr(4, y, names[i]);
+    y += 12;
+    u8g2gfx.drawStr(4, y, "The quick brown fox 0123");
+    y += 14;
+    if (y > UI_H - 10) break;
+  }
+
+  uiPageDots();
+}
+#else
+void drawFontTestPage() {
+  uiBackground(theme.bg, 8);
+  uiTopBar("Font Test");
+  uiText(8, 40, "U8g2_for_Adafruit_GFX not available", F_REG, theme.danger, 0);
+  uiPageDots();
+}
+#endif
 
 void drawTft(unsigned long now) {
   updateBacklight(now);

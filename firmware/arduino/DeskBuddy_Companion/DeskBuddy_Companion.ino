@@ -72,6 +72,11 @@
 #include <ArduinoJson.h>
 #include <math.h>
 
+#if __has_include(<U8g2_for_Adafruit_GFX.h>)
+#include <U8g2_for_Adafruit_GFX.h>
+#define HAS_U8G2_GFX 1
+#endif
+
 // Optional addressable LED strip support (WS2812B/NeoPixel).
 // Auto-enables when Adafruit NeoPixel library is installed. To force off,
 // define LED_STRIP_DISABLED before this block (or do not install the lib).
@@ -254,6 +259,7 @@ enum ScreenPage {
   PAGE_ENV,
   PAGE_NOTIFICATIONS,
   PAGE_POMODORO,
+  PAGE_FONT_TEST,
   PAGE_COUNT
 };
 
@@ -614,6 +620,9 @@ class InternalCanvas16 : public GFXcanvas16 {
   }
 };
 InternalCanvas16 sprite(128, 160);
+#if defined(HAS_U8G2_GFX)
+U8G2_FOR_ADAFRUIT_GFX u8g2gfx;
+#endif
 #include "ui_modern.h"
 
 // ----------------------------------------------------------------------------
@@ -638,6 +647,7 @@ const char* pageName(ScreenPage value) {
     case PAGE_ENV: return "environment";
     case PAGE_NOTIFICATIONS: return "notifications";
     case PAGE_POMODORO: return "pomodoro";
+    case PAGE_FONT_TEST: return "font_test";
     default: return "home";
   }
 }
@@ -2527,6 +2537,10 @@ void setup() {
   initOled();
   Serial.println("[boot] tft"); Serial.flush();
   initTft();
+#if defined(HAS_U8G2_GFX)
+  u8g2gfx.begin(sprite);
+  u8g2gfx.setFontMode(1); // transparent
+#endif
   Serial.println("[boot] sensors"); Serial.flush();
   initSensors();
   Serial.println("[boot] mic"); Serial.flush();
