@@ -51,7 +51,7 @@ def convert_font(ttf_path, size, output_path, font_name):
             byte_val = 0
             bit_pos = 7
             for col in range(w):
-                if img.getpixel((col, row)) > 127:
+                if img.getpixel((col, row)) > 32:
                     byte_val |= (1 << bit_pos)
                 bit_pos -= 1
                 if bit_pos < 0:

@@ -64,6 +64,7 @@
 // 4=Roboto, 5=Inter, 6=Montserrat, 7=JetBrainsMono
 // Set by the `set_font` command from the web panel.
 static uint8_t uiFontFaceMode = 0;
+static bool    uiFontAA = false;  // true for 4-bit anti-aliased TTF fonts
 
 static inline uint8_t _uiScaleSteps(uint8_t id) {
   switch (id) {
@@ -315,8 +316,84 @@ static int uiW(const char* s, uint8_t fid) {
   return (int)w;
 }
 // align: 0 left, 1 centre, 2 right. y is the text baseline.
+static void uiText(int x, int y, const char* s, uint8_t fid, uint16_t col, int align);
+static void uiTextAA(int x, int y, const char* s, uint8_t fid, uint16_t col, int align = 0) {
+  if (!s || !s[0]) return;
+  const GFXfont* font = uiFace(fid);
+  if (!font) { uiText(x, y, s, fid, col, align); return; }
+
+  // Use Adafruit GFX to get text bounds for alignment
+  int16_t x1, y1; uint16_t w, h;
+  sprite.setFont(font); sprite.setTextSize(1); sprite.setTextColor(col);
+  sprite.getTextBounds(s, 0, 0, &x1, &y1, &w, &h);
+  int px = (align == 0) ? x - x1 : (align == 1 ? x - (int)w / 2 - x1 : x - (int)w - x1);
+
+  int cursorX = px;
+  uint16_t fg = col;
+
+  for (const char* p = s; *p; p++) {
+    if (*p < font->first || *p > font->last) continue;
+    GFXglyph* g = (GFXglyph*)&font->glyph[*p - font->first];
+    uint8_t gw = g->width;
+    uint8_t gh = g->height;
+    int8_t xo = g->xOffset;
+    int8_t yo = g->yOffset;
+    uint16_t bo = g->bitmapOffset;
+    uint8_t xa = g->xAdvance;
+    uint8_t* bitmap = (uint8_t*)font->bitmap;
+
+    if (gw > 0 && gh > 0) {
+      // Draw 4-bit grayscale glyph with alpha blending
+      for (int row = 0; row < gh; row++) {
+        for (int col = 0; col < gw; col++) {
+          // Read 4-bit grayscale value (2 pixels per byte)
+          int byteIdx = bo + (row * gw + col) / 2;
+          uint8_t packed = bitmap[byteIdx];
+          uint8_t gray;
+          if ((row * gw + col) % 2 == 0) {
+            gray = (packed >> 4) & 0x0F;
+          } else {
+            gray = packed & 0x0F;
+          }
+          if (gray == 0) continue; // Skip transparent pixels
+
+          // Alpha blend: result = bg * (1 - alpha) + fg * alpha
+          uint8_t alpha = gray; // 0-15
+          int sx = cursorX + xo + col;
+          int sy = y + yo + row;
+          if (sx < 0 || sy < 0 || sx >= UI_W || sy >= UI_H) continue;
+
+          uint16_t bg = uiFb()[sy * UI_W + sx];
+
+          // Unpack RGB565
+          uint8_t r_bg = (bg >> 11) & 0x1F;
+          uint8_t g_bg = (bg >> 5) & 0x3F;
+          uint8_t b_bg = bg & 0x1F;
+          uint8_t r_fg = (fg >> 11) & 0x1F;
+          uint8_t g_fg = (fg >> 5) & 0x3F;
+          uint8_t b_fg = fg & 0x1F;
+
+          // Blend
+          uint8_t r = (r_bg * (15 - alpha) + r_fg * alpha) / 15;
+          uint8_t g = (g_bg * (15 - alpha) + g_fg * alpha) / 15;
+          uint8_t b = (b_bg * (15 - alpha) + b_fg * alpha) / 15;
+
+          // Repack
+          uint16_t result = (r << 11) | (g << 5) | b;
+          uiFb()[sy * UI_W + sx] = result;
+        }
+      }
+    }
+    cursorX += xa;
+  }
+}
+
 static void uiText(int x, int y, const char* s, uint8_t fid, uint16_t col, int align = 0) {
   if (!s || !s[0]) return;
+  if (uiFontAA) {
+    uiTextAA(x, y, s, fid, col, align);
+    return;
+  }
   int16_t x1, y1; uint16_t w, h;
   sprite.setFont(uiFace(fid)); sprite.setTextSize(uiScale(fid)); sprite.setTextColor(col);
   sprite.getTextBounds(s, 0, 0, &x1, &y1, &w, &h);
