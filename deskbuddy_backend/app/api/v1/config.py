@@ -223,13 +223,17 @@ async def get_theme_presets():
 # ---------------------------------------------------------------------------
 # Display: font face + wallpaper
 # ---------------------------------------------------------------------------
-VALID_FONT_FACES = ("pixel", "compact", "picopixel", "tiny3x3")
+VALID_FONT_FACES = ("pixel", "compact", "picopixel", "tiny3x3", "roboto", "inter", "montserrat", "jetbrainsmono")
 
 FONT_LABELS = {
     "pixel": "Pixel (Org_01)",
     "compact": "Compact (TomThumb)",
     "picopixel": "PicoPixel (6px)",
     "tiny3x3": "Tiny 3×3a (3px)",
+    "roboto": "Roboto (8px)",
+    "inter": "Inter (8px)",
+    "montserrat": "Montserrat (8px)",
+    "jetbrainsmono": "JetBrains Mono (8px)",
 }
 
 

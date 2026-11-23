@@ -24,6 +24,10 @@
 #include <Fonts/TomThumb.h>
 #include <Fonts/Picopixel.h>
 #include <Fonts/Tiny3x3a2pt7b.h>
+#include <Fonts/Roboto_8.h>
+#include <Fonts/Inter_8.h>
+#include <Fonts/Montserrat_8.h>
+#include <Fonts/JetBrainsMono_8.h>
 #include <esp_heap_caps.h>
 
 #define UI_W 128
@@ -48,7 +52,8 @@
 #define F_BIG  2
 #define F_HUGE 3
 
-// Font face mode: 0=Org_01(pixel), 1=TomThumb(compact), 2=Picopixel, 3=Tiny3x3a
+// Font face mode: 0=Org_01(pixel), 1=TomThumb(compact), 2=Picopixel, 3=Tiny3x3a,
+// 4=Roboto, 5=Inter, 6=Montserrat, 7=JetBrainsMono
 // Set by the `set_font` command from the web panel.
 static uint8_t uiFontFaceMode = 0;
 
@@ -60,6 +65,10 @@ static inline const GFXfont* uiFace(uint8_t id) {
     case 1: return &TomThumb;
     case 2: return &Picopixel;
     case 3: return &Tiny3x3a2pt7b;
+    case 4: return &Roboto_8;
+    case 5: return &Inter_8;
+    case 6: return &Montserrat_8;
+    case 7: return &JetBrainsMono_8;
     default: return &Org_01;
   }
 }

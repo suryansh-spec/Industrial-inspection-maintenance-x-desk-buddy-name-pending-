@@ -1275,7 +1275,14 @@ void handleBackendLine(const String& line) {
     if (idx > 0) beep(1300, 40);
   } else if (strcmp(cmd, "set_font") == 0) {
     const char* face = payload["face"] | "pixel";
-    uiFontFaceMode = (strcmp(face, "compact") == 0) ? 1 : 0;
+    if (strcmp(face, "compact") == 0) uiFontFaceMode = 1;
+    else if (strcmp(face, "picopixel") == 0) uiFontFaceMode = 2;
+    else if (strcmp(face, "tiny3x3") == 0) uiFontFaceMode = 3;
+    else if (strcmp(face, "roboto") == 0) uiFontFaceMode = 4;
+    else if (strcmp(face, "inter") == 0) uiFontFaceMode = 5;
+    else if (strcmp(face, "montserrat") == 0) uiFontFaceMode = 6;
+    else if (strcmp(face, "jetbrainsmono") == 0) uiFontFaceMode = 7;
+    else uiFontFaceMode = 0;
     int op = payload["opacity"] | -1;
     if (op >= 0) {
       wallpaperOpacity = (uint8_t)constrain(op, 0, 255);
