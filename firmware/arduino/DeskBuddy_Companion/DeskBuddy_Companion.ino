@@ -1451,9 +1451,6 @@ void handleBackendLine(const String& line) {
     int frequency = payload["frequency"] | 1200;
     int duration = payload["duration"] | 100;
     tone(PIN_SPEAKER, frequency, duration);
-  } else if (strcmp(cmd, "led") == 0) {
-    ledApplyCommand(payload);
-    tftDirty = true;
   } else if (strcmp(cmd, "get_status") == 0) {
     sendHeartbeat();
   } else if (strcmp(cmd, "get_sensors") == 0) {
@@ -2500,8 +2497,6 @@ void setup() {
   initSensors();
   Serial.println("[boot] mic"); Serial.flush();
   initMic();
-  Serial.println("[boot] led"); Serial.flush();
-  ledInit();
   Serial.println("[boot] init done"); Serial.flush();
 
   randomSeed(micros());
@@ -2648,6 +2643,4 @@ void loop() {
     }
   }
 
-  // Optional addressable LED strip update (no-op if unavailable/disabled).
-  ledUpdate(now);
 }
