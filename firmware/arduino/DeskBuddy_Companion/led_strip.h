@@ -7,7 +7,7 @@
 // is defined. All functions are no-ops when unavailable, so callers never need
 // their own #if guards beyond including this header.
 
-#if defined(ENABLE_LED_STRIP) && __has_include(<Adafruit_NeoPixel.h>)
+#if defined(ENABLE_LED_STRIP)
 #include <Adafruit_NeoPixel.h>
 #define LED_STRIP_AVAILABLE 1
 #else

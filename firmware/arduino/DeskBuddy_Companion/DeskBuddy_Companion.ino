@@ -75,11 +75,14 @@
 // Optional addressable LED strip support (WS2812B/NeoPixel).
 // Auto-enables when Adafruit NeoPixel library is installed. To force off,
 // define LED_STRIP_DISABLED before this block (or do not install the lib).
-#if !defined(LED_STRIP_DISABLED) && __has_include(<Adafruit_NeoPixel.h>)
+// Addressable LED strip support (WS2812B/NeoPixel). Enabled by default.
+// Requires the Adafruit NeoPixel library. To disable, define LED_STRIP_DISABLED.
+#ifndef LED_STRIP_DISABLED
 #define ENABLE_LED_STRIP 1
 #endif
 
 #if defined(ENABLE_LED_STRIP)
+#include <Adafruit_NeoPixel.h>
 #include "led_strip.h"
 #endif
 
@@ -1451,6 +1454,9 @@ void handleBackendLine(const String& line) {
     int frequency = payload["frequency"] | 1200;
     int duration = payload["duration"] | 100;
     tone(PIN_SPEAKER, frequency, duration);
+  } else if (strcmp(cmd, "led") == 0) {
+    ledApplyCommand(payload);
+    tftDirty = true;
   } else if (strcmp(cmd, "get_status") == 0) {
     sendHeartbeat();
   } else if (strcmp(cmd, "get_sensors") == 0) {
@@ -2497,6 +2503,8 @@ void setup() {
   initSensors();
   Serial.println("[boot] mic"); Serial.flush();
   initMic();
+  Serial.println("[boot] led"); Serial.flush();
+  ledInit();
   Serial.println("[boot] init done"); Serial.flush();
 
   randomSeed(micros());
@@ -2643,4 +2651,7 @@ void loop() {
     }
   }
 
+
+  // Optional addressable LED strip update (no-op if unavailable/disabled).
+  ledUpdate(now);
 }
