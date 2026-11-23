@@ -878,7 +878,7 @@ void drawMusicPage() {
 
   // Title + artist to the right of cover.
   uiMarquee(52, 30, 68, state.musicTitle, F_BOLD, theme.text, theme.bg, true);
-  uiTextFit(52, 46, state.musicArtist[0] ? state.musicArtist : "Unknown artist", F_REG, theme.secondary, 68, 0);
+  uiMarquee(52, 46, 68, state.musicArtist[0] ? state.musicArtist : "Unknown artist", F_REG, theme.secondary, theme.bg, false);
 
   // Current lyric (wrapped to use available space).
   if (state.lyricCur[0] != '\0') {
