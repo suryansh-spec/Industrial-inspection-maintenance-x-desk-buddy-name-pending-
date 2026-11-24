@@ -1422,14 +1422,24 @@ void handleBackendLine(const String& line) {
     if (idx > 0) beep(1300, 40);
   } else if (strcmp(cmd, "set_font") == 0) {
     const char* face = payload["face"] | "pixel";
-    if (strcmp(face, "compact") == 0) { uiFontFaceMode = 1; uiFontAA = false; }
-    else if (strcmp(face, "picopixel") == 0) { uiFontFaceMode = 2; uiFontAA = false; }
-    else if (strcmp(face, "tiny3x3") == 0) { uiFontFaceMode = 3; uiFontAA = false; }
-    else if (strcmp(face, "roboto") == 0) { uiFontFaceMode = 4; uiFontAA = true; }
-    else if (strcmp(face, "inter") == 0) { uiFontFaceMode = 5; uiFontAA = true; }
-    else if (strcmp(face, "montserrat") == 0) { uiFontFaceMode = 6; uiFontAA = true; }
-    else if (strcmp(face, "jetbrainsmono") == 0) { uiFontFaceMode = 7; uiFontAA = true; }
-    else { uiFontFaceMode = 0; uiFontAA = false; }
+    uint8_t m = 0; bool aa = false;
+    if (strcmp(face, "compact") == 0) { m = 1; aa = false; }
+    else if (strcmp(face, "picopixel") == 0) { m = 2; aa = false; }
+    else if (strcmp(face, "tiny3x3") == 0) { m = 3; aa = false; }
+    else if (strcmp(face, "roboto") == 0) { m = 4; aa = true; }
+    else if (strcmp(face, "inter") == 0) { m = 5; aa = true; }
+    else if (strcmp(face, "montserrat") == 0) { m = 6; aa = true; }
+    else if (strcmp(face, "jetbrainsmono") == 0) { m = 7; aa = true; }
+    else { m = 0; aa = false; }
+    uiFontFaceMode = m; uiFontAA = aa;
+    // Propagate to per-element music fonts so the dashboard font menu
+    // changes the music page too.
+    uiMusicTitleFont = m;      uiMusicTitleAA = aa;
+    uiMusicArtistFont = m;     uiMusicArtistAA = aa;
+    uiMusicActiveLyricFont = m; uiMusicActiveLyricAA = aa;
+    uiMusicUpcomingLyricFont = m; uiMusicUpcomingLyricAA = aa;
+    uiMusicTimerFont = m;      uiMusicTimerAA = aa;
+    uiMusicStatusFont = m;     uiMusicStatusAA = aa;
     int op = payload["opacity"] | -1;
     if (op >= 0) {
       wallpaperOpacity = (uint8_t)constrain(op, 0, 255);

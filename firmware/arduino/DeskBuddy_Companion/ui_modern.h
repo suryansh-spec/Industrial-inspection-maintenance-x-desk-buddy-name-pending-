@@ -319,8 +319,11 @@ static void uiClean(char* dst, size_t sz, const char* src) {
 static int uiW(const char* s, uint8_t fid) {
   if (!s || !s[0]) return 0;
   // For TTF fonts (4-bit AA), measure using glyph xAdvance directly.
+  // Must use uiFace(fid) (not uiFace(uiFontFaceMode)) so the scale matches
+  // what uiTextAARect / uiText actually draw (e.g. F_HUGE => 21px glyphs).
   if (uiFontFaceMode >= 4) {
-    const GFXfont* font = uiFace(uiFontFaceMode);
+    const GFXfont* font = uiFace(fid);
+    if (!font) return 0;
     int w = 0;
     for (const char* p = s; *p; p++) {
       if (*p < font->first || *p > font->last) continue;
@@ -913,23 +916,31 @@ void drawMusicPage() {
   // Use F_HUGE (21px) for title - clear and readable, with marquee for long text
   uiMarquee(52, 26, 74, state.musicTitle, F_HUGE, theme.text, theme.bg, true);
   uiFontFaceMode = uiMusicArtistFont; uiFontAA = true;
-  // Artist at F_REG (7px) - aligned with title at x=52, below title
-  uiTextFit(52, 46, state.musicArtist[0] ? state.musicArtist : "Unknown artist", F_REG, theme.secondary, 74, 0);
+  // Artist marquees like the title.
+  uiMarquee(52, 46, 74, state.musicArtist[0] ? state.musicArtist : "Unknown artist", F_REG, theme.secondary, theme.bg, true);
 
   // Current lyric (same font for all lines).
-  if (state.lyricCur[0] != '\0') {
+  if (state.musicPlaying && state.lyricCur[0] != '\0') {
     char ly[3][40];
     uiFontFaceMode = uiMusicActiveLyricFont; uiFontAA = uiMusicActiveLyricAA;
-    int n = uiWrap(state.lyricCur, F_REG, 112, ly, 3);
+    int n = uiWrap(state.lyricCur, uiMusicActiveLyricFont, 112, ly, 3);
     uint16_t lcol = state.lyricsAvailable ? uiFade(accent, 0.95f) : uiFade(theme.text, 0.7f);
     int ly0 = 76;
     for (int i = 0; i < n; i++) {
-      uiTextFit(8, ly0 + i * 11, ly[i], F_REG, lcol, 112, 0);
+      uiTextFit(8, ly0 + i * 11, ly[i], uiMusicActiveLyricFont, lcol, 112, 0);
     }
   }
 
   // Perimeter progress indicator around the album artwork.
-  float target = state.musicDuration > 0 ? uiClamp01((float)state.musicProgress / state.musicDuration) : 0.0f;
+  // Only advance when music is playing; freeze progress when paused.
+  float target;
+  if (!state.musicPlaying) {
+    target = uiProg;  // freeze at current progress when paused
+  } else if (state.musicDuration > 0) {
+    target = uiClamp01((float)state.musicProgress / state.musicDuration);
+  } else {
+    target = 0.0f;
+  }
   if (uiProg < 0) uiProg = 0.0f;
   // Reset on new track.
   if (strcmp(uiLastTitle, state.musicTitle) != 0) {
@@ -1156,14 +1167,13 @@ void drawLyricsPage() {
   }
 
   // Lyrics are the one place where content length is unbounded, so wrap at the
-  // panel width using the body face (7px -> ~19 chars per line) and allow four
-  // lines. At the 14px face only ~9 chars fit, which is what truncated long
-  // lines before.
+  // panel width using the active lyric face and allow four lines.
   const int LY_MAXW = 118;
   if (strcmp(lyKey, state.lyricCur) != 0) {
     strncpy(lyKey, state.lyricCur, sizeof(lyKey) - 1);
     lyKey[sizeof(lyKey) - 1] = 0;
-    lyN = uiWrap(state.lyricCur[0] ? state.lyricCur : "...", F_REG, LY_MAXW, lyLines, 4);
+    uiFontFaceMode = uiMusicUpcomingLyricFont; uiFontAA = uiMusicUpcomingLyricAA;
+    lyN = uiWrap(state.lyricCur[0] ? state.lyricCur : "...", uiMusicUpcomingLyricFont, LY_MAXW, lyLines, 4);
     lyChangeMs = uiNowMs;
   }
   float t = uiEaseOut((uiNowMs - lyChangeMs) / 380.0f);
@@ -1174,19 +1184,21 @@ void drawLyricsPage() {
          uiLerp(theme.bg, state.lyricsSynced ? theme.success : theme.warning, 42), 6);
   if (state.lyricTotal > 0 && state.lyricIndex >= 0) {
     char p[16]; snprintf(p, sizeof(p), "%d/%d", state.lyricIndex + 1, state.lyricTotal);
-    uiText(120, 33, p, F_REG, theme.secondary, 2);
+    uiText(120, 33, p, uiMusicUpcomingLyricFont, theme.secondary, 2);
   }
 
-  uiTextFit(64, 51 + slide / 4, state.lyricPrev, F_REG, uiFade(theme.text, 0.45f), LY_MAXW, 1);
+  uiFontFaceMode = uiMusicUpcomingLyricFont; uiFontAA = uiMusicUpcomingLyricAA;
+  uiTextFit(64, 51 + slide / 4, state.lyricPrev, uiMusicUpcomingLyricFont, uiFade(theme.text, 0.45f), LY_MAXW, 1);
 
   const int step = 9;
   int block = lyN * step, first = 80 - block / 2 + 7 + slide;
+  uint16_t ac = uiFade(accent, 0.30f + 0.70f * t);
   for (int i = 0; i < lyN; i++)
     if (lyLines[i][0])
-      uiTextFit(64, first + i * step, lyLines[i], F_REG,
-                uiFade(accent, 0.30f + 0.70f * t), LY_MAXW, 1);
+      uiTextFit(64, first + i * step, lyLines[i], uiMusicActiveLyricFont, ac, LY_MAXW, 1);
 
-  uiTextFit(64, 112 + slide / 3, state.lyricNext, F_REG, uiFade(theme.text, 0.45f * t + 0.12f), LY_MAXW, 1);
+  uiFontFaceMode = uiMusicUpcomingLyricFont; uiFontAA = uiMusicUpcomingLyricAA;
+  uiTextFit(64, 112 + slide / 3, state.lyricNext, uiMusicUpcomingLyricFont, uiFade(theme.text, 0.45f * t + 0.12f), LY_MAXW, 1);
   uiPageDots();
 }
 
