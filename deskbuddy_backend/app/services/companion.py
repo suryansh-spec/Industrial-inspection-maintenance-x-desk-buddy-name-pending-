@@ -102,7 +102,20 @@ class CompanionService:
                 self._lyrics_window = self._empty_lyrics_window()
                 self._lyrics_track = None
                 self._lyrics_track_key = None
+                self._cover_art_key = None
                 return self._lyrics_window
+
+            # Sync cover art independently of lyrics whenever the track changes.
+            from app.services.cover_art import cover_art_service as _cas
+
+            cover_key = _cas.cache_key(title, artist)
+            if cover_key != self._cover_art_key:
+                # _sync_cover_art sets self._cover_art_key itself before
+                # dispatching, so don't set it here (the task would see a
+                # matching key and return early without sending anything).
+                asyncio.create_task(
+                    self._sync_cover_art(title, artist, music.get("album_art_url"))
+                )
 
             key = lyrics_service.cache_key(title, artist, duration_ms)
             if key != self._lyrics_track_key:
@@ -114,9 +127,6 @@ class CompanionService:
                         track = await lyrics_service.load(title, artist, duration_ms)
                         self._lyrics_track = track
                         self._lyrics_window = lyrics_window(track, progress_ms)
-                        asyncio.create_task(
-                            self._sync_cover_art(title, artist, music.get("album_art_url"))
-                        )
                     except Exception:
                         pass
 
@@ -149,18 +159,17 @@ class CompanionService:
             if not assets:
                 return
 
-            from app.services import serial_manager as serial_state
+            from app.services.hardware_bridge import hardware_bridge
 
-            manager = serial_state.get_serial_manager()
-            if manager and manager.is_connected:
+            if hardware_bridge.is_connected:
                 # 1. Send 40x40 thumbnail for PAGE_MUSIC
-                await manager.send_command(
+                await hardware_bridge.send_command(
                     "cover_thumb",
                     {"track": title[:32], "data": assets["thumb_b64"],
                      "dominant_color": assets.get("dominant_color")},
                 )
                 # 2. Send 32x40 blurred background for PAGE_LYRICS
-                await manager.send_command(
+                await hardware_bridge.send_command(
                     "cover_bg",
                     {"track": title[:32], "w": 32, "h": 40, "data": assets["bg_b64"]},
                 )

@@ -372,8 +372,10 @@ async def companion_state_task():
     interval = max(0.5, float(settings.companion_push_interval))
     while True:
         try:
-            # Lyrics are refreshed by lyrics_refresh_task; do not block the
-            # state push on a (possibly slow) LRCLIB network lookup.
+            # Refresh lyrics + cover art on every tick so new tracks are
+            # detected even when the device hasn't sent a music message.
+            # Cache keys make this a no-op when nothing changed.
+            await companion_service.refresh_lyrics()
             summary = companion_service.get_summary()
             await ws_manager.broadcast("deskbuddy_state", summary)
             await ws_manager.broadcast(
