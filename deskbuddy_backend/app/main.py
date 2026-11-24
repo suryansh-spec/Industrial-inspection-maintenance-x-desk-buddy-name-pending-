@@ -392,11 +392,11 @@ async def companion_state_task():
                 },
             )
 
-            manager = serial_state.get_serial_manager()
-            if manager and manager.is_connected:
-                await manager.send_command(
+            state = companion_service.get_device_state(summary=summary)
+            if hardware_bridge.is_connected:
+                await hardware_bridge.send_command(
                     "deskbuddy_state",
-                    companion_service.get_device_state(summary=summary),
+                    state,
                 )
         except Exception:
             logger.exception("Companion state push failed")
