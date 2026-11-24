@@ -61,10 +61,11 @@ Switch modes with the **MODE button** or via web panel / API.
 | ADXL345 | @0x53 |
 | ST7735 TFT (SPI) | CS=10, MOSI=11, SCLK=12, DC=13, RST=14, BL=15 |
 | Buttons (active LOW) | MODE=16, VOICE=17, UP=19, DOWN=18, SELECT=4 |
-| Speaker (PWM) | GPIO 21 |
 | Battery ADC | GPIO 1 |
 | I2S Mic (INMP441) | SCK=5, WS=6, SD=7 |
-| Addressable LED strip (optional, WS2812B, 16 LEDs) | Data=GPIO 48 (alt 2), ext 5 V + common GND |
+| MAX98357A I2S Amp | BCLK=40, WS=41, DIN=42 |
+| Speaker (via MAX98357A) | 2 W speaker on MAX98357A OUT+/OUT-
+| Addressable LED ring (WS2812B, 16 LEDs) | Data=GPIO 4, ext 5 V + common GND |
 
 ### Requirements
 - Arduino IDE with ESP32 board package
@@ -124,7 +125,10 @@ multimodel_inspection_desk_buddy/
 - **Pomodoro** — work/break timer with notifications
 - **Battery** — 3S Li-ion piecewise curve, USB-power detection, percent
 - **Microphone** — I2S RMS level meter
-- **Voice assistant** — push-to-talk (VOICE button) → Wi-Fi HTTP → faster-whisper STT → Nemotron LLM → edge-tts TTS → MAX98357A speaker (backend + firmware complete; physical playback pending amp wiring). See `VOICE_ASSISTANT.md`.
+- **Voice assistant** — push-to-talk (VOICE button) → Wi-Fi HTTP → faster-whisper STT → Nemotron LLM → edge-tts TTS → MAX98357A speaker (E2E working: STT→LLM→TTS→speaker). See `VOICE_ASSISTANT.md`.
+- **Speaker** — MAX98357A I2S amplifier (BCLK=40, WS=41, DIN=42) driving 2 W speaker; boot beep, voice TTS output, and system alerts confirmed working.
+- **LED ring** — WS2812B 16-LED ring on GPIO 4; RGB color control from web panel Device Theme page; confirms device state and notifications visually.
+- **Microphone** — I2S RMS level meter
 - **Gaming mode** — process detection, session tracking, temp/VRAM alerts
 - **Device theme** — 12 colors/sizes, instant apply, partial refresh on all pages
 - **System monitor** — GPU: NVML→nvidia-smi→WMI; CPU temp: psutil→LHM/OHM→ACPI
@@ -226,9 +230,8 @@ Full interactive docs: http://127.0.0.1:8080/docs
 
 ### 🚀 Proposed Future Updates
 
-#### 1. Voice Assistant (Complete core pipeline)
-- **Status:** Push-to-talk → Wi-Fi HTTP → faster-whisper STT → Nemotron LLM → edge-tts TTS → 16 kHz PCM WAV. E2E verified: transcript "What is the health of motor one?", sensible reply, playable WAV in ~15 s. 51 backend tests pass.
-- **Blocked:** Physical playback requires wiring the MAX98357A (BCLK=40, LRC=41, DIN=42) + 4 Ω 2 W speaker + 5 V 3 A supply; Windows Firewall must allow ESP32 → port 8080.
+#### 1. Voice Assistant (Complete)
+- **Status:** Push-to-talk → Wi-Fi HTTP → faster-whisper STT → Nemotron LLM → edge-tts TTS → MAX98357A speaker. E2E verified: transcript → sensible reply → playable WAV → speaker output in ~15 s. 51 backend tests pass.
 - **Proposal:** Add wake word detection ("Hey Buddy"), offline STT (Whisper.cpp on ESP32-S3), streaming responses.
 
 #### 2. Charging Detection
