@@ -40,7 +40,7 @@
 //   Adafruit ADXL345
 //   ArduinoJson (v7)
 //
-// Serial protocol (112000 baud, newline-delimited JSON)
+// Serial protocol (115200 baud, newline-delimited JSON)
 //   PC -> device:
 //     {"cmd":"deskbuddy_state","payload":{ "act":"coding", ... }}
 //     {"cmd":"notification","payload":{ "title":"...", "message":"..." }}
@@ -70,7 +70,17 @@
 #include <Adafruit_ADXL345_U.h>
 #include <ESP_I2S.h>
 #include <ArduinoJson.h>
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <Preferences.h>
 #include <math.h>
+
+// Optional compile-time voice/Wi-Fi configuration. Create voice_config.h next
+// to this sketch (see voice_config.example.h). Values sent over serial are
+// stored in NVS and take precedence over these defaults.
+#if __has_include("voice_config.h")
+#include "voice_config.h"
+#endif
 
 #if __has_include(<U8g2_for_Adafruit_GFX.h>)
 #include <U8g2_for_Adafruit_GFX.h>
@@ -112,6 +122,12 @@
 
 #define PIN_SPEAKER       21
 #define PIN_BATTERY       1
+
+// MAX98357A I2S voice output (optional; the base build still uses the PWM
+// speaker on GPIO21 for beeps). These pins are free on the ESP32-S3 DevKitC-1.
+#define PIN_AMP_BCLK      40
+#define PIN_AMP_LRC       41
+#define PIN_AMP_DIN       42
 
 // I2S MEMS microphone (INMP441 / ICS-43434). Tie the mic's L/R pin to GND so
 // it drives the left slot; the firmware reads mono 32-bit slots.
@@ -604,6 +620,16 @@ void drawStatusLabel();
 void drawTft(unsigned long now);
 void updateBacklight(unsigned long now);
 const char* activityLabel();
+
+// Voice assistant (Wi-Fi HTTP + MAX98357A I2S output)
+void voiceInit();
+void voiceTick(unsigned long now);
+void voiceToggle();
+void voiceCancel();
+void voiceHandleCommand(JsonObjectConst payload);
+void voiceSaveConfig(const char* ssid, const char* pass, const char* url);
+void drawVoiceOverlay(unsigned long now);
+bool voiceIsCapturing();
 
 // ----------------------------------------------------------------------------
 // Modern UI (sprite-based, anti-aliased)
@@ -1193,6 +1219,7 @@ void handleButtonDefault(int index) {
       currentExpr = EXPR_CURIOUS;
       beep(1400, 55);
       sendButton("voice");
+      voiceToggle();
       break;
 
     case 2:  // UP
@@ -1480,6 +1507,22 @@ void handleBackendLine(const String& line) {
     v = payload["status"] | ""; if (v[0]) { uiMusicStatusFont = fontModeFromName(v); uiMusicStatusAA = fontAAFromMode(uiMusicStatusFont); }
     tftDirty = true;
     tftFullRedraw = true;
+  } else if (strcmp(cmd, "voice") == 0) {
+    voiceHandleCommand(payload);
+  } else if (strcmp(cmd, "wifi") == 0) {
+    const char* ssid = payload["ssid"] | "";
+    const char* pass = payload["pass"] | "";
+    voiceSaveConfig(ssid[0] ? ssid : nullptr, pass[0] ? pass : nullptr, nullptr);
+    WiFi.disconnect(true);
+  } else if (strcmp(cmd, "voice_server") == 0) {
+    const char* url = payload["url"] | "";
+    if (url[0]) voiceSaveConfig(nullptr, nullptr, url);
+  } else if (strcmp(cmd, "voice_config") == 0) {
+    const char* ssid = payload["ssid"] | "";
+    const char* pass = payload["pass"] | "";
+    const char* url = payload["url"] | "";
+    voiceSaveConfig(ssid[0] ? ssid : nullptr, pass[0] ? pass : nullptr, url[0] ? url : nullptr);
+    WiFi.disconnect(true);
   } else if (strcmp(cmd, "get_status") == 0) {
     sendHeartbeat();
   } else if (strcmp(cmd, "get_sensors") == 0) {
@@ -2504,11 +2547,687 @@ void formatTime(int seconds, char* buffer, size_t size) {
 // drawTft() and updateBacklight() are provided by ui_modern.h
 
 // ----------------------------------------------------------------------------
+// Voice assistant (Wi-Fi HTTP + MAX98357A I2S output)
+// ----------------------------------------------------------------------------
+// MAX98357A wiring (not populated in the base build):
+//   VIN -> 5V, GND -> GND, SD -> 3.3V (or leave floating if the board pulls up)
+//   BCLK -> GPIO40, LRC -> GPIO41, DIN -> GPIO42
+//   Speaker -> amplifier +/-
+// The existing GPIO21 PWM speaker is still used for local beeps.
+//
+// Configure Wi-Fi and the backend URL either in voice_config.h (compile-time)
+// or over serial (stored in NVS):
+//   {"cmd":"wifi","payload":{"ssid":"...","pass":"..."}}
+//   {"cmd":"voice_server","payload":{"url":"http://192.168.1.50:8080"}}
+//   {"cmd":"voice","payload":{"action":"start"}}
+// The backend must listen on 0.0.0.0:8080 and the PC firewall must allow the
+// device to reach it. Audio never leaves the local network except for the
+// Nemotron API and edge-tts, which the PC backend calls.
+
+#define VOICE_SAMPLE_RATE       16000
+#define VOICE_MAX_SECONDS       6
+#define VOICE_MAX_SAMPLES       (VOICE_SAMPLE_RATE * VOICE_MAX_SECONDS)
+#define VOICE_MAX_PCM_BYTES     (VOICE_MAX_SAMPLES * 2)
+#define VOICE_WIFI_TIMEOUT_MS   15000UL
+#define VOICE_WIFI_IDLE_MS      120000UL
+#define VOICE_HTTP_TIMEOUT_MS   60000
+
+#ifndef VOICE_WIFI_ALWAYS_ON
+#define VOICE_WIFI_ALWAYS_ON    0
+#endif
+#ifndef VOICE_WIFI_SSID
+#define VOICE_WIFI_SSID         ""
+#endif
+#ifndef VOICE_WIFI_PASS
+#define VOICE_WIFI_PASS         ""
+#endif
+#ifndef VOICE_SERVER_URL
+#define VOICE_SERVER_URL        ""
+#endif
+
+enum VoiceState {
+  VOICE_IDLE,
+  VOICE_CONNECTING,
+  VOICE_LISTENING,
+  VOICE_UPLOADING,
+  VOICE_THINKING,
+  VOICE_SPEAKING,
+  VOICE_ERROR
+};
+
+I2SClass audioOut;
+Preferences voicePrefs;
+
+VoiceState voiceState = VOICE_IDLE;
+bool voiceOverlayActive = false;
+unsigned long voiceOverlayUntil = 0;
+unsigned long voiceRecordStart = 0;
+unsigned long voiceWifiIdleAt = 0;
+bool voiceWifiConnected = false;
+
+uint8_t* voicePcm = nullptr;
+size_t voicePcmLen = 0;
+uint8_t* voiceWav = nullptr;
+size_t voiceWavLen = 0;
+uint8_t* voiceReplyWav = nullptr;
+size_t voiceReplyLen = 0;
+
+char voiceTranscript[192] = "";
+char voiceReplyText[384] = "";
+char voiceWifiSsid[64] = "";
+char voiceWifiPass[64] = "";
+char voiceServerUrl[160] = "";
+
+const char* voiceStateName() {
+  switch (voiceState) {
+    case VOICE_CONNECTING: return "connecting";
+    case VOICE_LISTENING:  return "listening";
+    case VOICE_UPLOADING:  return "uploading";
+    case VOICE_THINKING:   return "thinking";
+    case VOICE_SPEAKING:   return "speaking";
+    case VOICE_ERROR:      return "error";
+    default:               return "idle";
+  }
+}
+
+bool voiceIsCapturing() {
+  return voiceState == VOICE_LISTENING;
+}
+
+static void voiceCopy(char* dst, size_t dstSize, const char* src) {
+  if (!dst || dstSize == 0) return;
+  if (!src) {
+    dst[0] = '\0';
+    return;
+  }
+  strncpy(dst, src, dstSize - 1);
+  dst[dstSize - 1] = '\0';
+}
+
+void voiceLoadConfig() {
+  voiceWifiSsid[0] = '\0';
+  voiceWifiPass[0] = '\0';
+  voiceServerUrl[0] = '\0';
+
+  voicePrefs.begin("voice", true);
+  String ssid = voicePrefs.getString("ssid", "");
+  String pass = voicePrefs.getString("pass", "");
+  String url = voicePrefs.getString("url", "");
+  voicePrefs.end();
+
+  if (ssid.length()) voiceCopy(voiceWifiSsid, sizeof(voiceWifiSsid), ssid.c_str());
+  if (pass.length()) voiceCopy(voiceWifiPass, sizeof(voiceWifiPass), pass.c_str());
+  if (url.length()) voiceCopy(voiceServerUrl, sizeof(voiceServerUrl), url.c_str());
+
+  if (voiceWifiSsid[0] == '\0' && strlen(VOICE_WIFI_SSID) > 0) {
+    voiceCopy(voiceWifiSsid, sizeof(voiceWifiSsid), VOICE_WIFI_SSID);
+  }
+  if (voiceWifiPass[0] == '\0' && strlen(VOICE_WIFI_PASS) > 0) {
+    voiceCopy(voiceWifiPass, sizeof(voiceWifiPass), VOICE_WIFI_PASS);
+  }
+  if (voiceServerUrl[0] == '\0' && strlen(VOICE_SERVER_URL) > 0) {
+    voiceCopy(voiceServerUrl, sizeof(voiceServerUrl), VOICE_SERVER_URL);
+  }
+}
+
+void voiceSaveConfig(const char* ssid, const char* pass, const char* url) {
+  voicePrefs.begin("voice", false);
+  if (ssid && ssid[0]) voicePrefs.putString("ssid", ssid);
+  if (pass && pass[0]) voicePrefs.putString("pass", pass);
+  if (url && url[0]) voicePrefs.putString("url", url);
+  voicePrefs.end();
+
+  voiceLoadConfig();
+  Serial.printf("[voice] config ssid=%s url=%s\n",
+                voiceWifiSsid[0] ? voiceWifiSsid : "(unset)",
+                voiceServerUrl[0] ? voiceServerUrl : "(unset)");
+}
+
+static void voiceUrlDecode(const String& src, char* dst, size_t dstSize) {
+  if (!dst || dstSize == 0) return;
+  size_t j = 0;
+  for (size_t i = 0; i < src.length() && j + 1 < dstSize; i++) {
+    char c = src[i];
+    if (c == '%' && i + 2 < src.length()) {
+      char hex[3] = { src[i + 1], src[i + 2], 0 };
+      c = (char)strtol(hex, nullptr, 16);
+      i += 2;
+    } else if (c == '+') {
+      c = ' ';
+    }
+    if ((unsigned char)c >= 128) c = '?';
+    dst[j++] = c;
+  }
+  dst[j] = '\0';
+}
+
+static int voiceDrawWrapped(const char* text, int x, int y, int maxLines) {
+  if (!text || !text[0]) return y;
+  char line[24];
+  int lineLen = 0;
+  int lines = 0;
+  const char* p = text;
+  while (*p && lines < maxLines) {
+    while (*p == ' ') p++;
+    if (!*p) break;
+    const char* word = p;
+    while (*p && *p != ' ') p++;
+    int wordLen = (int)(p - word);
+    if (wordLen > 20) wordLen = 20;
+    if (lineLen > 0 && lineLen + 1 + wordLen > 20) {
+      line[lineLen] = '\0';
+      oled.drawStr(x, y, line);
+      y += 9;
+      lines++;
+      lineLen = 0;
+      if (lines >= maxLines) break;
+    }
+    if (lineLen > 0) line[lineLen++] = ' ';
+    for (int i = 0; i < wordLen && lineLen < 20; i++) {
+      char c = word[i];
+      if ((unsigned char)c >= 128) c = '?';
+      line[lineLen++] = c;
+    }
+  }
+  if (lineLen > 0 && lines < maxLines) {
+    line[lineLen] = '\0';
+    oled.drawStr(x, y, line);
+    y += 9;
+  }
+  return y;
+}
+
+void drawVoiceOverlay(unsigned long now) {
+  oled.clearBuffer();
+  oled.setFont(u8g2_font_6x10_tf);
+
+  const char* title = "DeskBuddy";
+  switch (voiceState) {
+    case VOICE_CONNECTING: title = "Connecting"; break;
+    case VOICE_LISTENING:  title = "Listening"; break;
+    case VOICE_UPLOADING:  title = "Uploading"; break;
+    case VOICE_THINKING:   title = "Thinking"; break;
+    case VOICE_SPEAKING:   title = "Speaking"; break;
+    case VOICE_ERROR:      title = "Voice error"; break;
+    default:               title = "DeskBuddy"; break;
+  }
+  oled.drawStr(2, 10, title);
+
+  if (voiceState == VOICE_LISTENING) {
+    unsigned long elapsed = now - voiceRecordStart;
+    int width = (int)((elapsed * 120UL) / (VOICE_MAX_SECONDS * 1000UL));
+    if (width < 0) width = 0;
+    if (width > 120) width = 120;
+    oled.drawFrame(2, 14, 124, 6);
+    if (width > 0) oled.drawBox(3, 15, width, 4);
+  }
+
+  oled.setFont(u8g2_font_5x7_tf);
+  int y = 32;
+  if (voiceState == VOICE_LISTENING) {
+    voiceDrawWrapped("Speak now. Press VOICE to stop.", 2, y, 3);
+  } else if (voiceState == VOICE_CONNECTING) {
+    voiceDrawWrapped(voiceWifiSsid[0] ? voiceWifiSsid : "No Wi-Fi configured", 2, y, 3);
+  } else if (voiceState == VOICE_UPLOADING || voiceState == VOICE_THINKING) {
+    voiceDrawWrapped(voiceTranscript[0] ? voiceTranscript : "Processing...", 2, y, 3);
+  } else {
+    voiceDrawWrapped(voiceReplyText[0] ? voiceReplyText : "Ready", 2, y, 3);
+  }
+
+  oled.sendBuffer();
+}
+
+void voiceSetError(const char* message) {
+  voiceCopy(voiceReplyText, sizeof(voiceReplyText), message ? message : "Voice error");
+  voiceState = VOICE_ERROR;
+  voiceOverlayActive = true;
+  voiceOverlayUntil = millis() + 8000;
+  targetExpr = EXPR_SAD;
+  triggerWake(3000);
+  tftDirty = true;
+
+  if (voiceWav) {
+    free(voiceWav);
+    voiceWav = nullptr;
+  }
+  voiceWavLen = 0;
+  if (voiceReplyWav) {
+    free(voiceReplyWav);
+    voiceReplyWav = nullptr;
+  }
+  voiceReplyLen = 0;
+
+  Serial.printf("[voice] error: %s\n", voiceReplyText);
+  drawVoiceOverlay(millis());
+}
+
+static inline int16_t voiceSampleToPcm16(int32_t sample) {
+  // The INMP441 delivers a 24-bit sample left-justified in a 32-bit slot.
+  int32_t value = sample >> 16;
+  if (value > 32767) value = 32767;
+  if (value < -32768) value = -32768;
+  return (int16_t)value;
+}
+
+void voiceNormalizePcm() {
+  if (!voicePcm || voicePcmLen < 2) return;
+  int16_t* samples = (int16_t*)voicePcm;
+  size_t count = voicePcmLen / 2;
+  int32_t peak = 0;
+  for (size_t i = 0; i < count; i++) {
+    int32_t v = samples[i];
+    if (v < 0) v = -v;
+    if (v > peak) peak = v;
+  }
+  if (peak < 200) return;
+  float gain = 24000.0f / (float)peak;
+  if (gain > 8.0f) gain = 8.0f;
+  if (gain <= 1.01f) return;
+  for (size_t i = 0; i < count; i++) {
+    int32_t v = (int32_t)((float)samples[i] * gain);
+    if (v > 32767) v = 32767;
+    if (v < -32768) v = -32768;
+    samples[i] = (int16_t)v;
+  }
+}
+
+bool voiceBuildWav() {
+  if (voiceWav) {
+    free(voiceWav);
+    voiceWav = nullptr;
+  }
+  voiceWavLen = 44 + voicePcmLen;
+  voiceWav = (uint8_t*)ps_malloc(voiceWavLen);
+  if (!voiceWav) {
+    voiceSetError("Out of PSRAM for WAV");
+    return false;
+  }
+
+  uint8_t* h = voiceWav;
+  uint32_t dataLen = (uint32_t)voicePcmLen;
+  uint32_t fileLen = 36 + dataLen;
+  uint32_t byteRate = (uint32_t)VOICE_SAMPLE_RATE * 2;
+  uint32_t sampleRate = (uint32_t)VOICE_SAMPLE_RATE;
+  uint32_t fmtLen = 16;
+  uint16_t audioFormat = 1;
+  uint16_t channels = 1;
+  uint16_t blockAlign = 2;
+  uint16_t bitsPerSample = 16;
+
+  memcpy(h + 0, "RIFF", 4);
+  memcpy(h + 4, &fileLen, 4);
+  memcpy(h + 8, "WAVE", 4);
+  memcpy(h + 12, "fmt ", 4);
+  memcpy(h + 16, &fmtLen, 4);
+  memcpy(h + 20, &audioFormat, 2);
+  memcpy(h + 22, &channels, 2);
+  memcpy(h + 24, &sampleRate, 4);
+  memcpy(h + 28, &byteRate, 4);
+  memcpy(h + 32, &blockAlign, 2);
+  memcpy(h + 34, &bitsPerSample, 2);
+  memcpy(h + 36, "data", 4);
+  memcpy(h + 40, &dataLen, 4);
+  memcpy(h + 44, voicePcm, voicePcmLen);
+  return true;
+}
+
+void voiceSendStatus() {
+  txDoc.clear();
+  txDoc["type"] = "voice_status";
+  txDoc["state"] = voiceStateName();
+  txDoc["wifi"] = (WiFi.status() == WL_CONNECTED);
+  txDoc["ip"] = WiFi.localIP().toString();
+  txDoc["ssid"] = voiceWifiSsid;
+  txDoc["server"] = voiceServerUrl;
+  txDoc["heap"] = ESP.getFreeHeap();
+  txDoc["psram"] = ESP.getFreePsram();
+  serializeJson(txDoc, Serial);
+  Serial.println();
+}
+
+bool voiceEnsureWifi() {
+  if (WiFi.status() == WL_CONNECTED) {
+    voiceWifiConnected = true;
+    voiceWifiIdleAt = millis() + VOICE_WIFI_IDLE_MS;
+    return true;
+  }
+  if (!voiceWifiSsid[0]) {
+    Serial.println("[voice] no Wi-Fi SSID configured");
+    return false;
+  }
+  if (!voiceServerUrl[0]) {
+    Serial.println("[voice] no voice server URL configured");
+    return false;
+  }
+
+  WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);
+  WiFi.begin(voiceWifiSsid, voiceWifiPass);
+
+  unsigned long start = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - start < VOICE_WIFI_TIMEOUT_MS) {
+    delay(100);
+    if ((millis() - start) % 500 < 100) drawVoiceOverlay(millis());
+  }
+
+  voiceWifiConnected = (WiFi.status() == WL_CONNECTED);
+  if (!voiceWifiConnected) {
+    Serial.println("[voice] Wi-Fi connect failed");
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_OFF);
+    return false;
+  }
+
+  voiceWifiIdleAt = millis() + VOICE_WIFI_IDLE_MS;
+  Serial.printf("[voice] Wi-Fi connected, IP=%s\n", WiFi.localIP().toString().c_str());
+  return true;
+}
+
+bool voiceStartCapture() {
+  if (voiceState == VOICE_LISTENING) return true;
+  if (voiceState != VOICE_IDLE && voiceState != VOICE_ERROR) return false;
+  if (!sensors.micOk) {
+    voiceSetError("Microphone unavailable");
+    return false;
+  }
+
+  voiceState = VOICE_CONNECTING;
+  voiceOverlayActive = true;
+  voiceOverlayUntil = millis() + 60000;
+  voiceTranscript[0] = '\0';
+  voiceReplyText[0] = '\0';
+  drawVoiceOverlay(millis());
+
+  if (!voiceEnsureWifi()) {
+    voiceSetError("Wi-Fi connection failed");
+    return false;
+  }
+
+  if (!voicePcm) {
+    voicePcm = (uint8_t*)ps_malloc(VOICE_MAX_PCM_BYTES);
+    if (!voicePcm) {
+      voiceSetError("Out of PSRAM for recording");
+      return false;
+    }
+  }
+
+  voicePcmLen = 0;
+  voiceRecordStart = millis();
+  voiceState = VOICE_LISTENING;
+  targetExpr = EXPR_TALKING;
+  triggerWake((unsigned long)VOICE_MAX_SECONDS * 1000UL + 5000UL);
+  beep(1400, 60);
+  tftDirty = true;
+  Serial.println("[voice] listening");
+  drawVoiceOverlay(millis());
+  return true;
+}
+
+void voiceSendToBackend() {
+  if (!voiceWav || voiceWavLen < 44) {
+    voiceSetError("No recorded audio");
+    return;
+  }
+  if (!voiceServerUrl[0]) {
+    voiceSetError("No voice server URL");
+    return;
+  }
+
+  String url = String(voiceServerUrl);
+  if (!url.endsWith("/api/v1/voice/chat")) {
+    if (url.endsWith("/")) url.remove(url.length() - 1);
+    url += "/api/v1/voice/chat";
+  }
+  if (url.indexOf('?') < 0) {
+    url += "?session_id=deskbuddy&language=en";
+  }
+
+  HTTPClient http;
+  http.setTimeout(VOICE_HTTP_TIMEOUT_MS);
+  if (!http.begin(url)) {
+    voiceSetError("HTTP begin failed");
+    return;
+  }
+  http.addHeader("Content-Type", "audio/wav");
+  http.addHeader("X-Session-Id", "deskbuddy");
+  http.addHeader("X-Device", "esp32s3");
+
+  int code = http.POST(voiceWav, voiceWavLen);
+  if (code != 200) {
+    char message[48];
+    snprintf(message, sizeof(message), "HTTP %d", code);
+    http.end();
+    voiceSetError(message);
+    return;
+  }
+
+  String transcript = http.header("X-Transcript");
+  String reply = http.header("X-Reply-Text");
+  voiceUrlDecode(transcript, voiceTranscript, sizeof(voiceTranscript));
+  voiceUrlDecode(reply, voiceReplyText, sizeof(voiceReplyText));
+
+  int contentLength = http.getSize();
+  if (voiceReplyWav) {
+    free(voiceReplyWav);
+    voiceReplyWav = nullptr;
+  }
+  voiceReplyLen = 0;
+
+  if (contentLength > 44) {
+    voiceReplyWav = (uint8_t*)ps_malloc((size_t)contentLength);
+    if (voiceReplyWav) {
+      WiFiClient* stream = http.getStreamPtr();
+      size_t read = 0;
+      unsigned long lastData = millis();
+      while (read < (size_t)contentLength && (millis() - lastData) < 20000UL) {
+        size_t available = (size_t)stream->available();
+        if (available > 0) {
+          size_t want = available;
+          if (want > (size_t)contentLength - read) want = (size_t)contentLength - read;
+          size_t got = stream->readBytes((char*)(voiceReplyWav + read), want);
+          if (got > 0) {
+            read += got;
+            lastData = millis();
+          }
+        } else {
+          delay(5);
+        }
+      }
+      voiceReplyLen = read;
+    }
+  }
+  http.end();
+
+  if (voiceWav) {
+    free(voiceWav);
+    voiceWav = nullptr;
+  }
+  voiceWavLen = 0;
+
+  Serial.printf("[voice] reply: %s\n", voiceReplyText);
+  Serial.printf("[voice] audio: %u bytes\n", (unsigned)voiceReplyLen);
+
+  if (voiceReplyLen > 44) {
+    voiceState = VOICE_SPEAKING;
+    voiceOverlayUntil = millis() + 60000;
+    drawVoiceOverlay(millis());
+    beep(1600, 40);
+    audioOut.playWAV(voiceReplyWav, voiceReplyLen);
+  }
+
+  voiceState = VOICE_IDLE;
+  voiceOverlayActive = true;
+  voiceOverlayUntil = millis() + 8000;
+  targetExpr = EXPR_HAPPY;
+  triggerWake(8000);
+  tftDirty = true;
+  drawVoiceOverlay(millis());
+}
+
+void voiceFinishCapture() {
+  if (voiceState != VOICE_LISTENING) return;
+
+  voiceState = VOICE_UPLOADING;
+  voiceOverlayActive = true;
+  voiceOverlayUntil = millis() + 60000;
+  targetExpr = EXPR_THINKING;
+  triggerWake(60000);
+  tftDirty = true;
+
+  voiceNormalizePcm();
+  Serial.printf("[voice] captured %u bytes (%.2fs)\n",
+                (unsigned)voicePcmLen,
+                voicePcmLen / (float)(VOICE_SAMPLE_RATE * 2));
+
+  if (voicePcmLen < 3200) {
+    voiceSetError("No audio captured");
+    return;
+  }
+  if (!voiceBuildWav()) return;
+
+  Serial.printf("[voice] uploading %u bytes\n", (unsigned)voiceWavLen);
+  voiceState = VOICE_THINKING;
+  drawVoiceOverlay(millis());
+  voiceSendToBackend();
+}
+
+void voiceCaptureTick() {
+  if (voiceState != VOICE_LISTENING) return;
+
+  unsigned long elapsed = millis() - voiceRecordStart;
+  if (elapsed >= (unsigned long)VOICE_MAX_SECONDS * 1000UL) {
+    voiceFinishCapture();
+    return;
+  }
+
+  size_t targetSamples = (size_t)((uint64_t)elapsed * VOICE_SAMPLE_RATE / 1000ULL);
+  size_t targetBytes = targetSamples * 2;
+  if (targetBytes > VOICE_MAX_PCM_BYTES) targetBytes = VOICE_MAX_PCM_BYTES;
+  if (voicePcmLen >= targetBytes) return;
+
+  int32_t chunk[128];
+  while (voicePcmLen < targetBytes && voicePcmLen + 2 <= VOICE_MAX_PCM_BYTES) {
+    size_t wantBytes = (targetBytes - voicePcmLen) * 2;
+    if (wantBytes > sizeof(chunk)) wantBytes = sizeof(chunk);
+    size_t got = i2s.readBytes((char*)chunk, wantBytes);
+    if (got == 0) break;
+    size_t samples = got / sizeof(int32_t);
+    for (size_t i = 0; i < samples && voicePcmLen + 2 <= VOICE_MAX_PCM_BYTES; i++) {
+      int16_t value = voiceSampleToPcm16(chunk[i]);
+      memcpy(voicePcm + voicePcmLen, &value, 2);
+      voicePcmLen += 2;
+    }
+  }
+}
+
+void voiceCancel() {
+  if (voicePcm) {
+    free(voicePcm);
+    voicePcm = nullptr;
+  }
+  if (voiceWav) {
+    free(voiceWav);
+    voiceWav = nullptr;
+  }
+  if (voiceReplyWav) {
+    free(voiceReplyWav);
+    voiceReplyWav = nullptr;
+  }
+  voicePcmLen = 0;
+  voiceWavLen = 0;
+  voiceReplyLen = 0;
+  voiceState = VOICE_IDLE;
+  voiceOverlayActive = false;
+  targetExpr = EXPR_CURIOUS;
+  tftDirty = true;
+  Serial.println("[voice] cancelled");
+}
+
+void voiceToggle() {
+  if (voiceState == VOICE_LISTENING) {
+    voiceFinishCapture();
+  } else if (voiceState == VOICE_IDLE || voiceState == VOICE_ERROR) {
+    voiceStartCapture();
+  }
+}
+
+void voiceTick(unsigned long now) {
+  if (voiceState == VOICE_LISTENING) {
+    voiceCaptureTick();
+  }
+
+  if (voiceOverlayActive && now > voiceOverlayUntil) {
+    voiceOverlayActive = false;
+    if (voiceState == VOICE_ERROR) voiceState = VOICE_IDLE;
+    tftDirty = true;
+  }
+
+#if !VOICE_WIFI_ALWAYS_ON
+  if (voiceWifiConnected && voiceState == VOICE_IDLE &&
+      voiceWifiIdleAt && now > voiceWifiIdleAt) {
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_OFF);
+    voiceWifiConnected = false;
+    voiceWifiIdleAt = 0;
+    Serial.println("[voice] Wi-Fi idle, radio off");
+  }
+#endif
+}
+
+void voiceHandleCommand(JsonObjectConst payload) {
+  const char* action = payload["action"] | "";
+  if (strcmp(action, "start") == 0) {
+    voiceStartCapture();
+  } else if (strcmp(action, "stop") == 0) {
+    if (voiceState == VOICE_LISTENING) voiceFinishCapture();
+  } else if (strcmp(action, "cancel") == 0) {
+    voiceCancel();
+  } else if (strcmp(action, "status") == 0) {
+    voiceSendStatus();
+  } else if (strcmp(action, "config") == 0) {
+    const char* ssid = payload["ssid"] | "";
+    const char* pass = payload["pass"] | "";
+    const char* url = payload["url"] | "";
+    voiceSaveConfig(ssid[0] ? ssid : nullptr,
+                    pass[0] ? pass : nullptr,
+                    url[0] ? url : nullptr);
+    WiFi.disconnect(true);
+  } else {
+    Serial.printf("[voice] unknown action: %s\n", action);
+  }
+}
+
+void voiceInit() {
+  voiceLoadConfig();
+
+  audioOut.setPins(PIN_AMP_BCLK, PIN_AMP_LRC, PIN_AMP_DIN, -1, -1);
+  if (audioOut.begin(I2S_MODE_STD, VOICE_SAMPLE_RATE,
+                     I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO)) {
+    Serial.println("[voice] I2S TX ready (BCLK=40, LRC=41, DIN=42)");
+  } else {
+    Serial.println("[voice] I2S TX init failed (MAX98357A not wired yet?)");
+  }
+
+  Serial.printf("[voice] ssid=%s server=%s\n",
+                voiceWifiSsid[0] ? voiceWifiSsid : "(unset)",
+                voiceServerUrl[0] ? voiceServerUrl : "(unset)");
+
+#if VOICE_WIFI_ALWAYS_ON
+  if (voiceWifiSsid[0]) {
+    WiFi.mode(WIFI_STA);
+    WiFi.setSleep(false);
+    WiFi.begin(voiceWifiSsid, voiceWifiPass);
+    voiceWifiIdleAt = millis() + VOICE_WIFI_IDLE_MS;
+  }
+#endif
+}
+
+// ----------------------------------------------------------------------------
 // Arduino entry points
 // ----------------------------------------------------------------------------
 void setup() {
   Serial.setRxBufferSize(16384);
-  Serial.begin(112000);
+  Serial.begin(115200);
   delay(300);
   Serial.println();
   Serial.println("=== DeskBuddy boot ===");
@@ -2546,6 +3265,8 @@ void setup() {
   initSensors();
   Serial.println("[boot] mic"); Serial.flush();
   initMic();
+  Serial.println("[boot] voice"); Serial.flush();
+  voiceInit();
   Serial.println("[boot] led"); Serial.flush();
   ledInit();
   Serial.println("[boot] init done"); Serial.flush();
@@ -2612,15 +3333,18 @@ void loop() {
   unsigned long now = millis();
 
   readSerial();
+  voiceTick(now);
 
-  if (now - lastMotionReadMs >= MOTION_MS) {
-    readMotion();
-    lastMotionReadMs = now;
-  }
+  if (!voiceIsCapturing()) {
+    if (now - lastMotionReadMs >= MOTION_MS) {
+      readMotion();
+      lastMotionReadMs = now;
+    }
 
-  if (now - lastEnvReadMs >= ENV_MS) {
-    readEnvironment();
-    lastEnvReadMs = now;
+    if (now - lastEnvReadMs >= ENV_MS) {
+      readEnvironment();
+      lastEnvReadMs = now;
+    }
   }
 
   if (now - lastBatteryReadMs >= BATTERY_MS) {
@@ -2629,7 +3353,7 @@ void loop() {
   }
 
   if (now - lastMicReadMs >= MIC_MS) {
-    readMicrophone();
+    if (!voiceIsCapturing()) readMicrophone();
     lastMicReadMs = now;
   }
 
@@ -2647,11 +3371,12 @@ void loop() {
   updateExpression(now);
 
   if (now - lastEyeMs >= EYE_FRAME_MS) {
-    drawEyes(now);
+    if (voiceOverlayActive) drawVoiceOverlay(now);
+    else drawEyes(now);
     lastEyeMs = now;
   }
 
-  if (tftDirty || now - lastTftMs >= TFT_REFRESH_MS) {
+  if (!voiceIsCapturing() && (tftDirty || now - lastTftMs >= TFT_REFRESH_MS)) {
     drawTft(now);
     tftDirty = false;
     // advance on a fixed grid so heavy frames don't permanently drag the

@@ -103,10 +103,12 @@ deskbuddy_backend/
 - Battery voltage/percentage and I2S microphone level in device telemetry
 
 ### 🤖 Voice Assistant (Nemotron)
-- NVIDIA Nemotron LLM integration
-- Tool calling for device control
-- Multi-turn conversations
-- TTS/STT integration ready
+- Push-to-talk → Wi-Fi HTTP → faster-whisper STT (`tiny.en`, local CPU) → NVIDIA Nemotron LLM (`nvidia/nemotron-3-ultra-550b-a55b`) → edge-tts TTS → 16 kHz PCM WAV
+- Multi-turn conversation history (NVS-backed on device; in-memory on backend)
+- Tool calling: motor inspection, equipment RUL, media control, buddy expressions
+- Reasoning disabled via `chat_template_kwargs: {"enable_thinking": false}`
+- Windows SAPI offline TTS fallback; `/chat`, `/chat/json`, `/tts`, `/stt`, `/health`, `/ws`, `/reset`, `/status`, `/tools`
+- E2E verified end-to-end (~15 s per turn); 51 voice tests pass
 
 ### 🎵 YouTube Music Integration
 - Search and playback control
@@ -219,8 +221,15 @@ ENABLE_DESK_MATE=true
 | | `GET /api/v1/desktop/music/lyrics` | Current 3-line lyric window |
 | | `GET /api/v1/desktop/music/lyrics/full` | Full cached lyric sheet |
 | | `GET /api/v1/desktop/calendar/events` | Calendar events |
-| **Voice** | `POST /api/v1/voice/query` | Voice query |
-| | `WS /api/v1/voice/ws` | Real-time voice |
+| **Voice** | `POST /api/v1/voice/chat` | STT → Nemotron → TTS, returns 16 kHz WAV + `X-Transcript`/`X-Reply-Text` |
+| | `POST /api/v1/voice/chat/json` | JSON variant of `/chat` |
+| | `POST /api/v1/voice/tts` | Text → 16 kHz PCM WAV |
+| | `POST /api/v1/voice/stt` | Transcribe WAV/MP3 → text |
+| | `GET /api/v1/voice/health` | Voice service probe |
+| | `GET /api/v1/voice/status` | Voice config/status |
+| | `POST /api/v1/voice/reset` | Clear conversation history |
+| | `WS /api/v1/voice/ws` | Real-time voice (WAV in, WAV out) |
+| | `GET /api/v1/voice/tools` | List Nemotron tools |
 
 ## WebSocket Channels
 

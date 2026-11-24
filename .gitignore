@@ -33,5 +33,11 @@ Thumbs.db
 **/.env
 **/.env.*
 
+# Voice assistant credentials (copy voice_config.example.h)
+firmware/arduino/DeskBuddy_Companion/voice_config.h
+
+# Local voice test audio
+deskbuddy_backend/test_question.wav
+
 # Embedded git repos / nested
 ml/signa_ fault_classification_pipeline/

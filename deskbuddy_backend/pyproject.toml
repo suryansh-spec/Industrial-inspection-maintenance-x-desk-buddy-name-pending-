@@ -54,6 +54,13 @@ dependencies = [
     "python-dotenv==1.0.1",
     "orjson==3.10.0",
     "python-dateutil==2.9.0",
+    # Voice assistant: local Whisper STT + edge-tts neural TTS
+    "faster-whisper>=1.2.0",
+    "edge-tts>=7.0.0",
+    "soundfile>=0.13.0",
+    "onnxruntime>=1.17.0",
+    "numpy>=1.24",
+    "scipy>=1.10",
 ]
 
 [project.optional-dependencies]

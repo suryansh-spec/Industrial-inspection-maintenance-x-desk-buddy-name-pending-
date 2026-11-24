@@ -52,7 +52,26 @@ class Settings(BaseSettings):
     nvidia_api_key: Optional[str] = None
     nemotron_model: str = "nvidia/nemotron-4-340b-instruct"
     nemotron_base_url: str = "https://integrate.api.nvidia.com/v1"
-    
+    voice_timeout: float = 60.0
+    voice_disable_thinking: bool = True
+    voice_max_tokens: int = 256
+    voice_history_turns: int = 6
+
+    # Speech-to-text (faster-whisper, local)
+    whisper_model: str = "tiny.en"
+    whisper_device: str = "cpu"
+    whisper_compute_type: str = "int8"
+    whisper_language: str = "en"
+    whisper_beam_size: int = 1
+    whisper_vad_filter: bool = True
+
+    # Text-to-speech (edge-tts neural, SAPI fallback)
+    tts_voice: str = "en-US-ChristopherNeural"
+    tts_speed: float = 1.0
+
+    # Voice upload guard (the ESP32 sends ~160 KB for 5 seconds of PCM16)
+    voice_max_upload_bytes: int = 10 * 1024 * 1024
+
     # Audio
     audio_sample_rate: int = 16000
     audio_chunk_size: int = 1024

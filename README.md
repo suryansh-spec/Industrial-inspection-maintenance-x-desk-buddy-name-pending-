@@ -124,6 +124,7 @@ multimodel_inspection_desk_buddy/
 - **Pomodoro** — work/break timer with notifications
 - **Battery** — 3S Li-ion piecewise curve, USB-power detection, percent
 - **Microphone** — I2S RMS level meter
+- **Voice assistant** — push-to-talk (VOICE button) → Wi-Fi HTTP → faster-whisper STT → Nemotron LLM → edge-tts TTS → MAX98357A speaker (backend + firmware complete; physical playback pending amp wiring). See `VOICE_ASSISTANT.md`.
 - **Gaming mode** — process detection, session tracking, temp/VRAM alerts
 - **Device theme** — 12 colors/sizes, instant apply, partial refresh on all pages
 - **System monitor** — GPU: NVML→nvidia-smi→WMI; CPU temp: psutil→LHM/OHM→ACPI
@@ -212,7 +213,10 @@ pytest tests/ -q   # 41 passed
 | | `GET /api/v1/desktop/music/lyrics` | Current 3-line lyric window |
 | | `GET /api/v1/desktop/music/lyrics/full` | Full cached lyric sheet |
 | Config | `GET/PUT /api/v1/config/device-theme` | Device theme |
-| Voice | `POST /api/v1/voice/query` | Voice assistant query |
+| Voice | `POST /api/v1/voice/chat` | STT → Nemotron → TTS, returns 16 kHz WAV |
+| | `POST /api/v1/voice/tts` | Text → 16 kHz PCM WAV |
+| | `POST /api/v1/voice/stt` | Transcribe WAV/MP3 → text |
+| | `GET /api/v1/voice/health` | Voice service probe |
 
 Full interactive docs: http://127.0.0.1:8080/docs
 
@@ -222,10 +226,10 @@ Full interactive docs: http://127.0.0.1:8080/docs
 
 ### 🚀 Proposed Future Updates
 
-#### 1. Voice Assistant (In Progress)
-- **Status:** Nemotron LLM integration, tool calling scaffolded
-- **Next:** Push-to-talk via VOICE button → STT → LLM → TTS → speaker
-- **Proposal:** Add wake word detection ("Hey Buddy"), offline STT (Whisper.cpp on ESP32-S3), streaming responses
+#### 1. Voice Assistant (Complete core pipeline)
+- **Status:** Push-to-talk → Wi-Fi HTTP → faster-whisper STT → Nemotron LLM → edge-tts TTS → 16 kHz PCM WAV. E2E verified: transcript "What is the health of motor one?", sensible reply, playable WAV in ~15 s. 51 backend tests pass.
+- **Blocked:** Physical playback requires wiring the MAX98357A (BCLK=40, LRC=41, DIN=42) + 4 Ω 2 W speaker + 5 V 3 A supply; Windows Firewall must allow ESP32 → port 8080.
+- **Proposal:** Add wake word detection ("Hey Buddy"), offline STT (Whisper.cpp on ESP32-S3), streaming responses.
 
 #### 2. Charging Detection
 - **Status:** Not implemented (no charge-detect pin)
