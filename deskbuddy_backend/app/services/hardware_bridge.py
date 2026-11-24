@@ -8,7 +8,7 @@ import serial
 import serial.tools.list_ports
 from datetime import datetime
 from typing import Optional, Dict, Any, List, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 from enum import Enum
 import time
 
@@ -496,7 +496,7 @@ class HardwareBridge:
         return self.state == ConnectionState.CONNECTED
     
     def get_sensor_data(self) -> Dict[str, Any]:
-        return self.sensor_data.copy()
+        return asdict(self.sensor_data)
     
     def get_device_info(self) -> Dict[str, Any]:
         return {

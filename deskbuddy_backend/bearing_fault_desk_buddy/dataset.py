@@ -1,68 +1,67 @@
+"""Data loaders for the extensive bearing fault CNN."""
 
+from __future__ import annotations
+
+from typing import Optional, Tuple
+import numpy as np
 import torch
-from torch.utils.data import Dataset, DataLoader
-from sklearn.model_selection import train_test_split
+from torch.utils.data import DataLoader, TensorDataset
 
 
-class MyDataset(Dataset):
-    def __init__(self, x, y):
+def get_dataloaders(
+    X: np.ndarray,
+    y: np.ndarray,
+    opt,
+    val_size: float = 0.15,
+    test_size: float = 0.15,
+    seed: int = 42,
+):
+    """Build train/val/test DataLoaders with stratified splits and optional
+    weighted sampling for imbalanced fault classes.
 
-        self.x = torch.as_tensor(
-            x, dtype=torch.float32
-        ).unsqueeze(1)
+    X shape: (N, channels, window_size)
+    y shape: (N,) integer class labels
+    """
+    from sklearn.model_selection import train_test_split
 
-        y = torch.as_tensor(y)
-
-        # Support both integer labels and one-hot labels
-        if y.ndim == 2:
-            y = y.argmax(dim=1)
-
-        self.y = y.long()
-
-    def __len__(self):
-        return len(self.x)
-
-    def __getitem__(self, idx):
-        return self.x[idx], self.y[idx]
-
-
-def get_dataloaders(X, Y, opt):
-
-    # Convert one-hot labels into integer class labels
-    labels = Y.argmax(axis=1) if Y.ndim == 2 else Y
-
-    x_train, x_hold, y_train, y_hold = train_test_split(
-        X,
-        labels,
-        train_size=opt.train_size,
-        stratify=labels,
-        random_state=42
+    # Split
+    X_train, X_temp, y_train, y_temp = train_test_split(
+        X, y, train_size=1.0 - val_size - test_size,
+        stratify=y, random_state=seed,
+    )
+    val_rel = val_size / (val_size + test_size)
+    X_val, X_test, y_val, y_test = train_test_split(
+        X_temp, y_temp, train_size=val_rel, stratify=y_temp, random_state=seed,
     )
 
-    x_valid, x_test, y_valid, y_test = train_test_split(
-        x_hold,
-        y_hold,
-        train_size=0.5,
-        stratify=y_hold,
-        random_state=42
-    )
+    def to_tensor(arr_x, arr_y):
+        tx = torch.as_tensor(arr_x, dtype=torch.float32)
+        ty = torch.as_tensor(arr_y, dtype=torch.long)
+        return TensorDataset(tx, ty)
+
+    train_ds = to_tensor(X_train, y_train)
+    val_ds = to_tensor(X_val, y_val)
+    test_ds = to_tensor(X_test, y_test)
+
+    # Weighted sampler for the training set if classes are imbalanced
+    sampler = None
+    if getattr(opt, "use_weighted_sampler", True):
+        class_counts = np.bincount(y_train)
+        class_counts[class_counts == 0] = 1
+        weights = 1.0 / class_counts[y_train]
+        sampler = torch.utils.data.WeightedRandomSampler(
+            weights, num_samples=len(weights), replacement=True
+        )
 
     train_dl = DataLoader(
-        MyDataset(x_train, y_train),
-        batch_size=opt.batch_size,
-        shuffle=True
+        train_ds, batch_size=opt.batch_size, shuffle=(sampler is None),
+        sampler=sampler, num_workers=0, drop_last=True,
     )
-
-    valid_dl = DataLoader(
-        MyDataset(x_valid, y_valid),
-        batch_size=opt.batch_size,
-        shuffle=False
+    val_dl = DataLoader(
+        val_ds, batch_size=opt.batch_size, shuffle=False, num_workers=0,
     )
-
     test_dl = DataLoader(
-        MyDataset(x_test, y_test),
-        batch_size=opt.batch_size,
-        shuffle=False
+        test_ds, batch_size=opt.batch_size, shuffle=False, num_workers=0,
     )
 
-    return train_dl, valid_dl, test_dl
+    return train_dl, val_dl, test_dl

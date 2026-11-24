@@ -60,12 +60,22 @@ class LocalAnalyzer:
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
         try:
-            from bearing_fault_desk_buddy.model import CNNModel
+            from bearing_fault_desk_buddy.model import ExtensiveCNN
 
             checkpoint = torch.load(model_path, map_location=self.device, weights_only=True)
-            model = CNNModel()
-            state_dict = checkpoint.get("model_state_dict", checkpoint)
-            model.load_state_dict(state_dict)
+            self.window_size = int(checkpoint.get("window_size", 1024))
+            self.sampling_rate = int(checkpoint.get("sample_rate_hz", 12000))
+            self.class_names = checkpoint.get(
+                "class_names", ["Normal", "Inner Race", "Ball", "Outer Race"]
+            )
+            model = ExtensiveCNN(
+                num_classes=len(self.class_names),
+                in_channels=int(checkpoint.get("input_channels", 1)),
+                variant=checkpoint.get("variant", "light"),
+                window_size=self.window_size,
+                use_spectral=bool(checkpoint.get("use_spectral", False)),
+            )
+            model.load_state_dict(checkpoint["model_state_dict"])
             model.eval()
             model.to(self.device)
 

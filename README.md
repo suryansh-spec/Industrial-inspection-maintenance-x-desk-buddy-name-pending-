@@ -135,11 +135,12 @@ multimodel_inspection_desk_buddy/
 - **Autonomous mode** — face stays alive when PC link drops
 
 ### ✅ Industrial Inspection Mode
-- **CNN vibration analysis** — PyTorch model, 100% accuracy on CWRU dataset
-- **Traditional analysis** — FFT, envelope, ISO 10816-3 classification
-- **Equipment prognostics (RUL)** — age tracking, exponential degradation, failure date projection
+- **CNN vibration analysis** — Deep residual 1D-CNN (ExtensiveCNN-light + spectral branch), 100% accuracy on CWRU 4-class benchmark with recording-level splits (no leakage). GPU-accelerated (RTX 3060, CUDA 12.4). See `ml/bearing_fault_desk_buddy_updated/` for full research documentation.
+- **Traditional analysis** — FFT, envelope, ISO 10816-3 classification (statistical fallback when CNN unavailable)
+- **Equipment prognostics (RUL)** — Physics-informed multi-model RUL (exponential + linear + Paris' law crack growth), ISO 10816-3 severity (Zone A–D), uncertainty quantification, blended health index
 - **ISO 10816-3 zones** — Zone A (Good) → Zone D (Critical)
-- **Inspection TFT page** — live accel, capture buffer, result display
+- **Inspection TFT page** — live accel, capture buffer, result display, perimeter progress ring
+- **Extended CWRU downloader** — 64 MAT files covering 12k/48k DE/FE, inner/ball/outer faults at 3 diameters × 4 loads
 - **Cover art & blurred backgrounds** for inspection reports (planned)
 
 ### ✅ Web Control Panel (9 Tabs)
@@ -226,7 +227,19 @@ Full interactive docs: http://127.0.0.1:8080/docs
 
 ---
 
-## Roadmap & Future Proposals
+## ML / Industrial Inspection Module
+
+The strengthened inspection pipeline lives in `ml/bearing_fault_desk_buddy_updated/` and is fully documented in its own `README.md`. Key contributions to the DeskBuddy project:
+
+| Contribution | Description |
+|-------------|-------------|
+| **Fault Classification** | Deep residual 1D-CNN (ExtensiveCNN-light + spectral branch), 100% test accuracy on CWRU 4-class benchmark with recording-level splits (no leakage) |
+| **RUL Prognostics** | Physics-informed (exponential + linear + Paris' law), ISO 10816-3 severity (Zone A–D), uncertainty quantification, blended health index |
+| **Data Pipeline** | Extended CWRU downloader (64 MAT files cataloged, 40 downloaded), augmentation, overlapping windows, recording-level stratified splits |
+| **GPU Inference** | CUDA 12.4 PyTorch on NVIDIA RTX 3060 for training and inference |
+| **Research Artifacts** | 20 publication-quality visualizations (time, frequency, time-frequency domains, ROC/PR curves, confusion matrix) |
+
+See `ml/bearing_fault_desk_buddy_updated/README.md` for the complete research documentation including methodology, results, limitations, and reproducibility instructions.
 
 ### 🚀 Proposed Future Updates
 

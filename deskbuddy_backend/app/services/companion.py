@@ -311,11 +311,9 @@ class CompanionService:
                     result = await analyze(x, y, z, sample_rate_hz=sample_rate, method=method)
                     events.append({"channel": "inspection_result", "data": result})
                     # Also send result back to device
-                    # Send result back to device
-                    from app.services import serial_manager as serial_state
-                    manager = serial_state.get_serial_manager()
-                    if manager and manager.is_connected:
-                        await manager.send_command("inspection_result", result)
+                    from app.services.hardware_bridge import hardware_bridge
+                    if hardware_bridge.is_connected:
+                        await hardware_bridge.send_command("inspection_result", result)
                 except Exception as exc:
                     logger.exception("Inspection analysis failed: %s", exc)
             else:
@@ -749,13 +747,12 @@ class CompanionService:
         priority: int = 1,
         notification_id: Optional[str] = None,
     ) -> bool:
-        from app.services import serial_manager as serial_state
+        from app.services.hardware_bridge import hardware_bridge
 
-        manager = serial_state.get_serial_manager()
-        if not manager or not manager.is_connected:
+        if not hardware_bridge.is_connected:
             return False
 
-        return await manager.send_command(
+        return await hardware_bridge.send_command(
             "notification",
             {
                 "id": _clean(notification_id, 48),
@@ -766,13 +763,12 @@ class CompanionService:
         )
 
     async def push_pomodoro(self, action: str, minutes: int = 25) -> bool:
-        from app.services import serial_manager as serial_state
+        from app.services.hardware_bridge import hardware_bridge
 
-        manager = serial_state.get_serial_manager()
-        if not manager or not manager.is_connected:
+        if not hardware_bridge.is_connected:
             return False
 
-        return await manager.send_command(
+        return await hardware_bridge.send_command(
             "pomodoro",
             {"action": action, "minutes": minutes},
         )
