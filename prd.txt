@@ -134,7 +134,7 @@ The product consists of four major layers:
 | ADXL345 GY-291 | Dedicated vibration measurement probe |
 | INMP441 | Digital I2S microphone |
 | MAX98357A | I2S Class-D audio amplifier |
-| 4Ω, 5W speaker | Audio output |
+| 4Ω, 2W speaker | Audio output (limit MAX98357A drive to ≤2W) |
 | Three 18650 3000mAh cells | Proposed 3S1P battery pack |
 | LM2596 buck converter | Prototype regulated 5V power supply |
 | Five-button module | Physical navigation and input |
