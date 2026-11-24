@@ -1,0 +1,10 @@
+{
+  "assumed_sample_rate_hz": 12000,
+  "window_size": 1,
+  "windows_per_class": {
+    "Normal": 473,
+    "Inner": 119,
+    "Ball": 117,
+    "Outer": 118
+  }
+}

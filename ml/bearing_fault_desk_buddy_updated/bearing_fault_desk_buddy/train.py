@@ -306,6 +306,7 @@ def evaluate_model(
     model: nn.Module,
     test_dl: DataLoader,
     num_classes: int = 4,
+    class_names: Optional[List[str]] = None,
     device: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Evaluate on test set with per-class metrics."""
@@ -355,10 +356,24 @@ def evaluate_model(
     for t, p in zip(all_targets, all_preds):
         cm[t, p] += 1
 
+    # Classification report for visualization
+    from sklearn.metrics import classification_report
+    target_names = class_names or [f"class_{i}" for i in range(num_classes)]
+    report = classification_report(
+        all_targets, all_preds,
+        labels=list(range(num_classes)),
+        target_names=target_names,
+        zero_division=0, output_dict=True
+    )
+
     return {
         "accuracy": round(accuracy, 4),
         "accuracy_pct": round(accuracy, 2),
         "class_metrics": class_metrics,
         "confusion_matrix": cm.tolist(),
+        "classification_report": report,
+        "probabilities": all_probs,
+        "labels": all_targets,
+        "predictions": all_preds,
         "num_samples": int(len(all_targets)),
     }

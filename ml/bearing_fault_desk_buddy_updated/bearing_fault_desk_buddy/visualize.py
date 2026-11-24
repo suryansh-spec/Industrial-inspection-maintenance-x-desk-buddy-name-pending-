@@ -23,26 +23,26 @@ def save_dataset_visualizations(X, y, class_names, output_dir, sample_rate=12000
 
     fig, axes = plt.subplots(n, 1, figsize=(12, 2.5*n), squeeze=False)
     for c, ax in enumerate(axes[:, 0]):
-        s = examples[c]; t = np.arange(len(s))/sample_rate
+        s = examples[c].squeeze(); t = np.arange(len(s))/sample_rate
         ax.plot(t, s, linewidth=.7); ax.set(title=f"{class_names[c]} — time-domain waveform", xlabel="Time (s)", ylabel="Amplitude"); ax.grid(alpha=.2)
     _save(fig, out, "02_time_domain_waveforms.png")
 
     fig, axes = plt.subplots(n, 1, figsize=(12, 2.5*n), squeeze=False)
     for c, ax in enumerate(axes[:, 0]):
-        s = examples[c] - np.mean(examples[c]); spec = np.abs(np.fft.rfft(s*np.hanning(len(s))))
+        s = examples[c].squeeze() - np.mean(examples[c].squeeze()); spec = np.abs(np.fft.rfft(s*np.hanning(len(s))))
         freq = np.fft.rfftfreq(len(s), d=1/sample_rate)
         ax.plot(freq, spec, linewidth=.7); ax.set(title=f"{class_names[c]} — FFT spectrum", xlabel="Frequency (Hz)", ylabel="Magnitude"); ax.grid(alpha=.2)
     _save(fig, out, "03_fft_spectra.png")
 
     fig, axes = plt.subplots(n, 1, figsize=(12, 2.5*n), squeeze=False)
     for c, ax in enumerate(axes[:, 0]):
-        f, p = welch(examples[c], fs=sample_rate, nperseg=min(512, len(examples[c])))
+        f, p = welch(examples[c].squeeze(), fs=sample_rate, nperseg=min(512, len(examples[c].squeeze())))
         ax.semilogy(f, p+1e-18); ax.set(title=f"{class_names[c]} — Welch PSD", xlabel="Frequency (Hz)", ylabel="Power/Hz"); ax.grid(alpha=.2)
     _save(fig, out, "04_welch_psd.png")
 
     fig, axes = plt.subplots(n, 1, figsize=(12, 3*n), squeeze=False)
     for c, ax in enumerate(axes[:, 0]):
-        f, t, z = spectrogram(examples[c], fs=sample_rate, nperseg=256, noverlap=192)
+        f, t, z = spectrogram(examples[c].squeeze(), fs=sample_rate, nperseg=256, noverlap=192)
         mesh = ax.pcolormesh(t, f, 10*np.log10(z+1e-18), shading="auto")
         ax.set(title=f"{class_names[c]} — spectrogram", xlabel="Time (s)", ylabel="Frequency (Hz)")
         fig.colorbar(mesh, ax=ax, label="Power (dB/Hz)")
@@ -51,6 +51,7 @@ def save_dataset_visualizations(X, y, class_names, output_dir, sample_rate=12000
     names = ["RMS", "Std", "Peak-to-peak", "Kurtosis", "Skewness", "Crest factor"]
     feats = []
     for s in X:
+        s = s.squeeze()
         rms = np.sqrt(np.mean(s.astype(float)**2)); peak = np.max(np.abs(s))
         feats.append([rms, np.std(s), np.ptp(s), kurtosis(s, fisher=True), skew(s), peak/(rms+1e-12)])
     feats = np.asarray(feats)
