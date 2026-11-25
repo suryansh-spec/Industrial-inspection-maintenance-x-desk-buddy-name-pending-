@@ -153,7 +153,7 @@ class EventBus:
         event = Event(
             type=event_type,
             data=data,
-            source=event.source if hasattr(event, 'source') else "",
+            source=source,
         )
         await self.publish(event)
     
@@ -213,16 +213,14 @@ async def emit_notification(title: str, message: str, priority: str = "normal", 
 
 
 async def emit_pomodoro_tick(remaining: int, is_break: bool):
-    from app.main import ws_manager
-    from app.services.deskmate_service import deskmate_service
-    
+    from app.services.deskmate import deskmate_service
+
     if deskmate_service:
         await deskmate_service.on_pomodoro_tick(remaining, is_break)
 
 
 async def emit_pomodoro_event(event: str):
-    from app.main import ws_manager
-    from app.services.deskmate_service import deskmate_service
-    
+    from app.services.deskmate import deskmate_service
+
     if deskmate_service:
         await deskmate_service.on_pomodoro_complete(event)

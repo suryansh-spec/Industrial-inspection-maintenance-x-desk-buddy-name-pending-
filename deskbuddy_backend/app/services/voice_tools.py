@@ -216,10 +216,10 @@ async def tool_run_motor_inspection(motor_id: str, duration_sec: int = 3) -> Dic
             await manager.send_command("play_tone", {"frequency": 1400, "duration": 150})
 
         # Return live context if available or mock diagnostic telemetry
-        sensors = companion_service.device.sensors
-        accel_x = sensors.get("accel_x", 0.0)
-        accel_y = sensors.get("accel_y", 0.0)
-        accel_z = sensors.get("accel_z", 9.8)
+        accel = getattr(companion_service.device, "accel", {}) or {}
+        accel_x = float(accel.get("x", 0.0) or 0.0)
+        accel_y = float(accel.get("y", 0.0) or 0.0)
+        accel_z = float(accel.get("z", 9.8) or 9.8)
 
         # Baseline inspection response
         return {
@@ -329,7 +329,7 @@ async def tool_set_buddy_expression(expression: str) -> Dict[str, Any]:
         from app.services import serial_manager as serial_state
         from app.services.companion import companion_service
 
-        companion_service.activity.force_expression(expression)
+        companion_service.activity.set_manual_expression(expression)
 
         manager = serial_state.get_serial_manager()
         if manager and manager.is_connected:

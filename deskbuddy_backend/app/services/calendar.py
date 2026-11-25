@@ -4,7 +4,7 @@ Calendar Service - Google Calendar / Outlook integration.
 import asyncio
 import logging
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any
 import uuid
 
@@ -91,11 +91,11 @@ class CalendarService:
             
             if not creds or not creds.valid:
                 if creds and creds.expired and creds.refresh_token:
-                    creds.refresh(Request())
+                    await asyncio.to_thread(creds.refresh, Request())
                 else:
                     return False
-            
-            self._service = build('calendar', 'v3', credentials=creds)
+
+            self._service = await asyncio.to_thread(build, 'calendar', 'v3', credentials=creds)
             return True
         except Exception as e:
             logger.debug(f"Google Calendar not available: {e}")
@@ -121,8 +121,8 @@ class CalendarService:
                 client_credential=client_secret
             )
             
-            # Would need to implement token acquisition
-            return True
+            # Token acquisition and Microsoft Graph API integration not yet implemented
+            return False
         except Exception as e:
             logger.debug(f"Outlook Calendar not available: {e}")
             return False
@@ -141,6 +141,14 @@ class CalendarService:
         else:
             return self._get_mock_events(start, end)
     
+    @staticmethod
+    def _to_rfc3339_utc(dt: datetime) -> str:
+        if dt.tzinfo is None:
+            dt = dt.astimezone(timezone.utc)
+        else:
+            dt = dt.astimezone(timezone.utc)
+        return dt.isoformat().replace("+00:00", "Z")
+
     async def _get_google_events(
         self,
         start: datetime,
@@ -149,13 +157,17 @@ class CalendarService:
     ) -> List[CalendarEvent]:
         """Get events from Google Calendar."""
         try:
-            events_result = self._service.events().list(
-                calendarId=calendar_id,
-                timeMin=start.isoformat() + 'Z',
-                timeMax=end.isoformat() + 'Z',
-                singleEvents=True,
-                orderBy='startTime'
-            ).execute()
+            time_min = self._to_rfc3339_utc(start)
+            time_max = self._to_rfc3339_utc(end)
+            events_result = await asyncio.to_thread(
+                lambda: self._service.events().list(
+                    calendarId=calendar_id,
+                    timeMin=time_min,
+                    timeMax=time_max,
+                    singleEvents=True,
+                    orderBy='startTime'
+                ).execute()
+            )
             
             events = events_result.get('items', [])
             result = []
@@ -234,7 +246,7 @@ class CalendarService:
     
     async def get_next_event(self) -> Optional[CalendarEvent]:
         """Get the next upcoming event."""
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         events = await self.get_events(now, now + timedelta(days=7))
         return events[0] if events else None
     
@@ -264,7 +276,9 @@ class CalendarService:
                 },
             }
             
-            created = self._service.events().insert(calendarId='primary', body=event).execute()
+            created = await asyncio.to_thread(
+                lambda: self._service.events().insert(calendarId='primary', body=event).execute()
+            )
             
             start_dt = datetime.fromisoformat(event_data['start'].replace('Z', '+00:00'))
             end_dt = datetime.fromisoformat(event_data['end'].replace('Z', '+00:00'))

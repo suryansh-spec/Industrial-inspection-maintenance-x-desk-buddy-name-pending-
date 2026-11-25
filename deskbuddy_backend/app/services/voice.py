@@ -321,7 +321,10 @@ class VoiceAssistant:
                 **self._chat_extras(),
             }
             data = await self._post_chat(req_payload)
-            choice = data["choices"][0]
+            choices = data.get("choices") or []
+            if not choices or not isinstance(choices[0], dict) or "message" not in choices[0]:
+                raise RuntimeError("Invalid LLM response: missing choices")
+            choice = choices[0]
             msg = choice["message"]
 
             tool_calls = msg.get("tool_calls")
@@ -344,7 +347,9 @@ class VoiceAssistant:
                 fn = tc.get("function", {})
                 name = fn.get("name", "")
                 try:
-                    args = json.loads(fn.get("arguments", "{}"))
+                    raw_args = fn.get("arguments") or "{}"
+                    parsed = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
+                    args = parsed if isinstance(parsed, dict) else {}
                 except Exception:
                     args = {}
 
@@ -367,7 +372,12 @@ class VoiceAssistant:
                 **self._chat_extras(),
             }
             final_data = await self._post_chat(followup_payload)
-            answer = (final_data["choices"][0]["message"].get("content") or "").strip()
+            final_choices = final_data.get("choices") or []
+            answer = (
+                (final_choices[0].get("message", {}).get("content") or "").strip()
+                if final_choices and isinstance(final_choices[0], dict)
+                else ""
+            )
             if not answer:
                 answer = "I completed the request, but I couldn't produce a spoken summary."
             self._remember(session_id, text, answer)

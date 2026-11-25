@@ -132,8 +132,7 @@ class GamingService:
         self.fullscreen_detection = True
         self.game_library: Set[str] = set()  # lowercase exe names
         self.current_session: Optional[Dict] = None
-        self._candidate_process: Optional[str] = None
-        self._candidate_since: float = 0.0
+        self._candidates: Dict[str, float] = {}
         self._last_sample_time: float = 0.0
         self._session_peaks: Dict[str, float] = {}
         self._alerts: List[Dict] = []
@@ -192,38 +191,41 @@ class GamingService:
             foreground_title = _get_foreground_window_title().lower()
             processes = list(psutil.process_iter(["name", "cpu_percent", "memory_info"]))
             
-            # Layer 1: Manual game library
+            # Layer 1: Manual game library & known games
             for proc in processes:
                 try:
-                    name = (proc.info.get("name") or "").lower().replace(".exe", "")
-                    if name in self.game_library:
-                        return proc.info["name"]
+                    raw_name = proc.info.get("name") or ""
+                    name = raw_name.lower().replace(".exe", "")
+                    if name in self.game_library or name in KNOWN_GAMES:
+                        return raw_name
                 except Exception:
                     continue
-            
+
             # Layer 2: Auto-detect via GPU/CPU threshold
             if self.auto_detect:
+                now = time.monotonic()
+                active_candidates: Dict[str, float] = {}
                 for proc in processes:
                     try:
-                        name = (proc.info.get("name") or "").lower().replace(".exe", "")
-                        if name in SYSTEM_PROCESSES:
+                        raw_name = proc.info.get("name") or ""
+                        name = raw_name.lower().replace(".exe", "")
+                        if not raw_name or name in SYSTEM_PROCESSES:
                             continue
                         cpu = proc.info.get("cpu_percent") or 0
                         if cpu >= self.cpu_threshold:
-                            # Check sustained
-                            if self._candidate_process == proc.info["name"]:
-                                if time.monotonic() - self._candidate_since >= self.sustained_seconds:
-                                    # Layer 3: Fullscreen check
-                                    if self.fullscreen_detection:
-                                        if _is_fullscreen():
-                                            return proc.info["name"]
-                                    else:
-                                        return proc.info["name"]
-                            else:
-                                self._candidate_process = proc.info["name"]
-                                self._candidate_since = time.monotonic()
+                            since = self._candidates.get(raw_name, now)
+                            active_candidates[raw_name] = since
+                            if now - since >= self.sustained_seconds:
+                                if self.fullscreen_detection:
+                                    if _is_fullscreen():
+                                        self._candidates = active_candidates
+                                        return raw_name
+                                else:
+                                    self._candidates = active_candidates
+                                    return raw_name
                     except Exception:
                         continue
+                self._candidates = active_candidates
         except Exception as e:
             logger.debug("Game detection error: %s", e)
         return None
@@ -277,6 +279,8 @@ class GamingService:
                 "threshold": alert["threshold"],
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             })
+            if len(self._alerts) > 200:
+                self._alerts = self._alerts[-200:]
             # Trigger notification
             try:
                 from app.services.notification_service import notification_service
@@ -304,8 +308,9 @@ class GamingService:
         if not self.enabled:
             return
         
+        import asyncio
         now = time.monotonic()
-        game_exe = self._find_game_process()
+        game_exe = await asyncio.to_thread(self._find_game_process)
         
         if game_exe and self.current_session is None:
             # Game launched

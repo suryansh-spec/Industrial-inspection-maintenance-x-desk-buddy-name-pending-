@@ -224,18 +224,7 @@ class MusicController:
             if self._intended_playing is not None:
                 _is_playing = self._intended_playing
             else:
-                _session_alive = bool(smtc_status.title) and smtc_status.duration_ms > 0
-                _not_ended = smtc_status.progress_ms < smtc_status.duration_ms
-                _is_playing = (not self._explicitly_paused) and (
-                    _raw_smtc_playing or (_session_alive and _not_ended)
-                )
-            # Interpolate progress for backgrounded tabs (SMTC position freezes).
-            if _is_playing is None:
-                _session_alive = bool(smtc_status.title) and smtc_status.duration_ms > 0
-                _not_ended = smtc_status.progress_ms < smtc_status.duration_ms
-                _is_playing = (not self._explicitly_paused) and (
-                    smtc_status.playing or (_session_alive and _not_ended)
-                )
+                _is_playing = (not self._explicitly_paused) and _raw_smtc_playing
             smtc_status.playing = _is_playing
             # Interpolate progress for backgrounded tabs (SMTC position freezes).
             if smtc_status.duration_ms > 0 and smtc_status.playing:
@@ -260,12 +249,7 @@ class MusicController:
             return self._get_ytmusic_status()
         elif self._provider in ["windows_media", "wmp"]:
             status = self._get_windows_status()
-            # Heuristic playing state for backgrounded tabs.
-            _session_alive = bool(status.title) and status.duration_ms > 0
-            _not_ended = status.progress_ms < status.duration_ms
-            _is_playing = (not self._explicitly_paused) and (
-                status.playing or (_session_alive and _not_ended)
-            )
+            _is_playing = (not self._explicitly_paused) and status.playing
             status.playing = _is_playing
             # Interpolate progress for backgrounded tabs (SMTC position freezes).
             if status.duration_ms > 0 and _is_playing:
@@ -349,7 +333,10 @@ class MusicController:
                     "title": info.title,
                     "artist": info.artist,
                     "album": info.album_title,
-                    "playing": str(playback.playback_status).endswith("PLAYING"),
+                    "playing": (
+                        playback.playback_status
+                        == media_control.GlobalSystemMediaTransportControlsSessionPlaybackStatus.PLAYING
+                    ),
                     "progress": progress_ms,
                     "duration": duration_ms,
                 }
@@ -610,23 +597,43 @@ class MusicController:
     
     async def set_volume(self, level: int):
         """Set volume (0-100)."""
-        if level < 0: level = 0
-        if level > 100: level = 100
-        
+        level = max(0, min(100, int(level)))
+
         try:
             system = platform.system().lower()
             if system == "windows":
-                import subprocess
-                subprocess.run([
-                    "powershell", "-c",
-                    f"(New-Object -ComObject WScript.Shell).SendKeys([char]([int]('{level}' + '0')))"
-                ], check=False)
+                def _win_set_volume(pct: int):
+                    try:
+                        from ctypes import POINTER, cast
+                        from comtypes import CLSCTX_ALL  # type: ignore
+                        from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume  # type: ignore
+
+                        devices = AudioUtilities.GetSpeakers()
+                        dev = getattr(devices, "_dev", devices)
+                        interface = dev.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+                        volume = cast(interface, POINTER(IAudioEndpointVolume))
+                        volume.SetMasterVolumeLevelScalar(pct / 100.0, None)
+                        return
+                    except Exception:
+                        pass
+                    # Fallback if pycaw is unavailable: nircmd if installed
+                    import shutil
+                    import subprocess
+                    nircmd = shutil.which("nircmd")
+                    if nircmd:
+                        subprocess.run([nircmd, "setsysvolume", str(int(pct * 655.35))], check=False)
+
+                await asyncio.to_thread(_win_set_volume, level)
             elif system == "darwin":
                 import subprocess
-                subprocess.run(["osascript", "-e", f"set volume output volume {level}"], check=False)
+                await asyncio.to_thread(
+                    subprocess.run, ["osascript", "-e", f"set volume output volume {level}"], check=False
+                )
             elif system == "linux":
                 import subprocess
-                subprocess.run(["pactl", "set-sink-volume", "@DEFAULT_SINK@", f"{level}%"], check=False)
+                await asyncio.to_thread(
+                    subprocess.run, ["pactl", "set-sink-volume", "@DEFAULT_SINK@", f"{level}%"], check=False
+                )
         except Exception as e:
             logger.error(f"Volume error: {e}")
     
@@ -643,7 +650,7 @@ class MusicController:
             return []
         
         try:
-            results = self._ytmusic.search(query, filter="songs", limit=limit)
+            results = await asyncio.to_thread(self._ytmusic.search, query, filter="songs", limit=limit)
             return [
                 {
                     "title": r.get("title", ""),

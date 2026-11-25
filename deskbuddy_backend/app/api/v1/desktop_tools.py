@@ -247,7 +247,13 @@ async def get_calendar_events(
     start_date: Optional[str] = None
 ):
     """Get upcoming calendar events."""
-    start = datetime.fromisoformat(start_date) if start_date else datetime.now()
+    if start_date:
+        try:
+            start = datetime.fromisoformat(start_date)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid start_date ISO format")
+    else:
+        start = datetime.now()
     end = start + timedelta(days=days)
 
     events = await calendar_service.get_events(start, end)

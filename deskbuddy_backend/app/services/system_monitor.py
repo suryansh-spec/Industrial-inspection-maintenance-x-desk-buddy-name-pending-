@@ -272,10 +272,10 @@ class SystemMonitor:
             return GPUMetrics(
                 gpu_percent=self._to_float(parts[1]),
                 gpu_memory_percent=(
-                    (used_mb / total_mb) * 100 if used_mb and total_mb else None
+                    (used_mb / total_mb) * 100 if used_mb is not None and total_mb else None
                 ),
-                gpu_memory_used_mb=int(used_mb) if used_mb else None,
-                gpu_memory_total_mb=int(total_mb) if total_mb else None,
+                gpu_memory_used_mb=int(used_mb) if used_mb is not None else None,
+                gpu_memory_total_mb=int(total_mb) if total_mb is not None else None,
                 gpu_temp_c=self._to_float(parts[4]),
                 gpu_fan_percent=self._to_float(parts[5]) if len(parts) > 5 else None,
                 gpu_name=parts[0] or None,
@@ -432,53 +432,71 @@ class SystemMonitor:
         """Collect system metrics."""
         try:
             # CPU
-            cpu_percent = psutil.cpu_percent(interval=0.1)
-            cpu_per_core = psutil.cpu_percent(percpu=True)
-            cpu_freq = psutil.cpu_freq()
-            
+            def _cpu_and_io():
+                cpu_pct = psutil.cpu_percent(interval=0.1)
+                per_core = psutil.cpu_percent(percpu=True)
+                freq = psutil.cpu_freq()
+                d_usage = psutil.disk_usage('/')
+                d_io = psutil.disk_io_counters()
+                n_io = psutil.net_io_counters()
+                return cpu_pct, per_core, freq, d_usage, d_io, n_io
+
+            cpu_percent, cpu_per_core, cpu_freq, disk, disk_io, net_io = await asyncio.to_thread(_cpu_and_io)
+
             # Memory
             mem = psutil.virtual_memory()
             swap = psutil.swap_memory()
-            
-            # Disk
-            disk = psutil.disk_usage('/')
-            disk_io = psutil.disk_io_counters()
-            
-            # Network
-            net_io = psutil.net_io_counters()
-            
+
             # Temperatures (layered providers; cached to avoid slow subprocesses)
             cpu_temp, cpu_temp_source, thermal_zone = await self._read_cpu_temp()
-            
+
             # GPU (NVML -> nvidia-smi -> WMI name/VRAM)
-            gpu_metrics = self._read_gpu()
-            
+            gpu_metrics = await asyncio.to_thread(self._read_gpu)
+
             # Network and disk rates
-            now = time.time()
-            dt = now - self._last_check
+            now = time.monotonic()
+            dt = max(1e-6, now - self._last_check) if hasattr(self, "_last_check") and self._last_check else 1.0
             self._last_check = now
-            
-            net_sent_mb_s = (net_io.bytes_sent - self._last_net_io.bytes_sent) / dt / (1024*1024) if self._last_net_io else 0
-            net_recv_mb_s = (net_io.bytes_recv - self._last_net_io.bytes_recv) / dt / (1024*1024) if self._last_net_io else 0
-            self._last_net_io = net_io
-            
-            disk_read_mb_s = (disk_io.read_bytes - self._last_disk_io.read_bytes) / dt / (1024*1024) if self._last_disk_io else 0
-            disk_write_mb_s = (disk_io.write_bytes - self._last_disk_io.write_bytes) / dt / (1024*1024) if self._last_disk_io else 0
-            self._last_disk_io = disk_io
-            
-            # Top processes
-            processes = []
-            for proc in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent']):
-                try:
-                    info = proc.info
-                    if info['pid'] == 0 or (info.get('name') or '').lower() in {'system idle process', 'idle'}:
-                        continue
-                    if info['cpu_percent'] > 1.0 or info['memory_percent'] > 1.0:
-                        processes.append(info)
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    pass
-            
-            processes.sort(key=lambda x: x.get('cpu_percent', 0), reverse=True)
+
+            if net_io and self._last_net_io:
+                net_sent_mb_s = max(0.0, (net_io.bytes_sent - self._last_net_io.bytes_sent) / dt / (1024*1024))
+                net_recv_mb_s = max(0.0, (net_io.bytes_recv - self._last_net_io.bytes_recv) / dt / (1024*1024))
+            else:
+                net_sent_mb_s = 0.0
+                net_recv_mb_s = 0.0
+            if net_io:
+                self._last_net_io = net_io
+
+            if disk_io and self._last_disk_io:
+                disk_read_mb_s = max(0.0, (disk_io.read_bytes - self._last_disk_io.read_bytes) / dt / (1024*1024))
+                disk_write_mb_s = max(0.0, (disk_io.write_bytes - self._last_disk_io.write_bytes) / dt / (1024*1024))
+            else:
+                disk_read_mb_s = 0.0
+                disk_write_mb_s = 0.0
+            if disk_io:
+                self._last_disk_io = disk_io
+
+            # Top processes & thread count
+            def _scan_processes():
+                procs = []
+                threads = 0
+                for proc in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent']):
+                    try:
+                        info = proc.info
+                        if info['pid'] == 0 or (info.get('name') or '').lower() in {'system idle process', 'idle'}:
+                            continue
+                        try:
+                            threads += proc.num_threads()
+                        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                            pass
+                        if (info.get('cpu_percent') or 0.0) > 1.0 or (info.get('memory_percent') or 0.0) > 1.0:
+                            procs.append(info)
+                    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                        pass
+                procs.sort(key=lambda x: x.get('cpu_percent') or 0.0, reverse=True)
+                return procs, threads
+
+            processes, thread_count = await asyncio.to_thread(_scan_processes)
             
             # Create snapshot
             snapshot = SystemMetricsSnapshot(
@@ -502,15 +520,15 @@ class SystemMonitor:
                 disk_write_mb_s=disk_write_mb_s,
                 network_sent_mb_s=net_sent_mb_s,
                 network_recv_mb_s=net_recv_mb_s,
-                network_sent_total_mb=net_io.bytes_sent / (1024**2),
-                network_recv_total_mb=net_io.bytes_recv / (1024**2),
+                network_sent_total_mb=(net_io.bytes_sent / (1024**2)) if net_io else 0.0,
+                network_recv_total_mb=(net_io.bytes_recv / (1024**2)) if net_io else 0.0,
                 boot_time=datetime.fromtimestamp(psutil.boot_time(), tz=timezone.utc),
                 cpu_temp_c=cpu_temp,
                 cpu_temp_source=cpu_temp_source,
                 thermal_zone_c=thermal_zone,
                 gpu_metrics=gpu_metrics,
                 process_count=len(psutil.pids()),
-                thread_count=sum(p.num_threads() for p in psutil.process_iter() if p.is_running()),
+                thread_count=thread_count,
                 top_processes=processes[:10]
             )
             
@@ -618,6 +636,8 @@ class SystemMonitor:
             "memory": snapshot.memory_percent,
             "disk": snapshot.disk_percent,
             "cpu_temp": snapshot.cpu_temp_c,
+            "temperature": snapshot.cpu_temp_c,
+            "network": snapshot.network_recv_mb_s + snapshot.network_sent_mb_s,
             "gpu": snapshot.gpu_metrics.gpu_percent if snapshot.gpu_metrics else None,
             "gpu_temp": snapshot.gpu_metrics.gpu_temp_c if snapshot.gpu_metrics else None,
             "gpu_memory": snapshot.gpu_metrics.gpu_memory_percent if snapshot.gpu_metrics else None,

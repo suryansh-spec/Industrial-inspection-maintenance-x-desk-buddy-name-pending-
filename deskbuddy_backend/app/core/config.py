@@ -119,13 +119,7 @@ class Settings(BaseSettings):
     ml_batch_size: int = 64
     
     # Feature Flags
-    enable_pc_monitoring: bool = True
-    enable_music_control: bool = True
-    enable_calendar: bool = True
-    enable_voice_assistant: bool = True
-    enable_desk_mate: bool = True
     enable_hardware_bridge: bool = True
-    enable_voice_assistant: bool = True
     
     # Logging
     log_level: str = "INFO"

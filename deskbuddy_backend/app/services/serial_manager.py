@@ -24,6 +24,8 @@ class SerialManager:
         self.timeout = timeout
         self.serial: Optional[serial.Serial] = None
         self._connected = False
+        self._write_lock = asyncio.Lock()
+        self._rx_buf = bytearray()
 
     @property
     def is_connected(self) -> bool:
@@ -41,7 +43,8 @@ class SerialManager:
                 else:
                     raise RuntimeError("No serial ports found")
 
-            self.serial = serial.Serial(
+            self.serial = await asyncio.to_thread(
+                serial.Serial,
                 port=self.port,
                 baudrate=self.baudrate,
                 timeout=self.timeout,
@@ -51,15 +54,22 @@ class SerialManager:
             # Give the Arduino time to reset after opening the port.
             await asyncio.sleep(2)
 
-            self.serial.reset_input_buffer()
-            self.serial.reset_output_buffer()
+            await asyncio.to_thread(self.serial.reset_input_buffer)
+            await asyncio.to_thread(self.serial.reset_output_buffer)
 
             self._connected = True
+            self._rx_buf.clear()
             logger.info("Connected to %s at %s baud", self.port, self.baudrate)
             return True
 
         except Exception as exc:  # pragma: no cover - hardware dependent
             logger.error("Failed to connect to %s: %s", self.port, exc)
+            if self.serial and self.serial.is_open:
+                try:
+                    self.serial.close()
+                except Exception:
+                    pass
+            self.serial = None
             self._connected = False
             return False
 
@@ -94,8 +104,14 @@ class SerialManager:
                 message["payload"] = payload
 
             message_json = json.dumps(message) + "\n"
-            self.serial.write(message_json.encode())
-            self.serial.flush()
+            encoded = message_json.encode()
+
+            def _write_sync():
+                self.serial.write(encoded)
+                self.serial.flush()
+
+            async with self._write_lock:
+                await asyncio.to_thread(_write_sync)
             logger.debug("Sent: %s", message_json.strip())
             return True
         except Exception as exc:  # pragma: no cover - hardware dependent
@@ -103,13 +119,25 @@ class SerialManager:
             return False
 
     async def read_line(self) -> Optional[str]:
-        """Read a single line from the serial port."""
+        """Read a single line from the serial port without blocking on partial lines."""
         if not self.is_connected:
             return None
 
         try:
-            if self.serial.in_waiting > 0:
-                line = self.serial.readline().decode("utf-8", errors="ignore").strip()
+            def _read_avail():
+                if self.serial.in_waiting > 0:
+                    return self.serial.read(self.serial.in_waiting)
+                return b""
+
+            chunk = await asyncio.to_thread(_read_avail)
+            if chunk:
+                self._rx_buf.extend(chunk)
+                if len(self._rx_buf) > 32768:
+                    self._rx_buf = self._rx_buf[-16384:]
+            if b"\n" in self._rx_buf:
+                raw_line, _, rest = self._rx_buf.partition(b"\n")
+                self._rx_buf = bytearray(rest)
+                line = raw_line.decode("utf-8", errors="ignore").strip()
                 return line if line else None
         except Exception as exc:  # pragma: no cover - hardware dependent
             logger.error("Read error: %s", exc)

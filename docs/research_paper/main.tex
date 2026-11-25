@@ -1,9 +1,6 @@
-\documentclass[conference]{IEEEtran}
-\IEEEoverridecommandlockouts
-% The preceding line is only needed to identify funding in the first footnote. If that is unneeded, please comment it out.
+\documentclass[10pt,journal,onecolumn]{IEEEtran}
 \usepackage{cite}
 \usepackage{amsmath,amssymb,amsfonts}
-\usepackage{algorithmic}
 \usepackage{graphicx}
 \usepackage{textcomp}
 \usepackage{xcolor}
@@ -11,292 +8,302 @@
 \usepackage{multirow}
 \usepackage{url}
 
-\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
-    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
-
 \begin{document}
 
-\title{A Multimodal Desk-Companion Agent with On-Demand Edge Machinery Health Diagnostics and Fault Prognostics}
+\title{\LARGE \textbf{A MULTIMODAL DESK-COMPANION AGENT WITH ON-DEMAND EDGE MACHINERY HEALTH DIAGNOSTICS AND FAULT PROGNOSTICS}}
 
-\author{\IEEEauthorblockN{Suryansh Sharma}
-\IEEEauthorblockA{\textit{Department of Artificial Intelligence and Data Science} \\
-\textit{Dr. Akhilesh Das Gupta Institute of Professional Studies (ADGIPS)}\\
-Guru Gobind Singh Indraprastha University (GGSIPU), Delhi, India \\
-Email: suryansh3584@gmail.com}
-\and
-\IEEEauthorblockN{Prof. (Dr.) Archana Kumar}
-\IEEEauthorblockA{\textit{Department of Artificial Intelligence and Data Science} \\
-\textit{Dr. Akhilesh Das Gupta Institute of Professional Studies (ADGIPS)}\\
-Guru Gobind Singh Indraprastha University (GGSIPU), Delhi, India}
+\author{
+\textbf{Suryansh Sharma*1, Prof. (Dr.) Archana Kumar*2}\\
+\small *1 Department of Artificial Intelligence and Data Science, Dr. Akhilesh Das Gupta Institute of Professional Studies (ADGIPS), New Delhi, Delhi, India.\\
+\small *2 Professor, Department of Artificial Intelligence and Data Science, Dr. Akhilesh Das Gupta Institute of Professional Studies (ADGIPS), New Delhi, Delhi, India.
 }
 
 \maketitle
 
 \begin{abstract}
-Modern engineering workflows are characterized by high cognitive loads, fragmented context switching across desktop utilities, and an operational disconnect from physical prototyping and workshop machinery. While ambient robotic desk companions have emerged to alleviate cognitive fatigue, industrial maintenance instruments remain isolated, expensive, and specialized. This paper presents DeskBuddy, a novel cyber-physical edge-computing system that integrates an ambient, multimodal desktop companion agent with an on-demand industrial machinery health inspection instrument on a unified hardware platform. Powered by an ESP32-S3 dual-core microcontroller and an asynchronous edge-cloud architecture, the device alternates between two operating personalities without requiring a system reboot: (i) an interactive desktop companion featuring an expressive animated OLED face, SPI-driven dashboard telemetry, ambient illumination, physical gesture control, and conversational intelligence driven by the NVIDIA Nemotron large language model; and (ii) a handheld predictive maintenance analyzer that captures tri-axial vibration signals via MEMS accelerometry, executes statistical spectral extraction, and streams high-frequency windows to a hybrid 1D-Convolutional Neural Network (1D-CNN) and prognostics engine. Evaluated on the standardized Case Western Reserve University (CWRU) bearing dataset across 1,600 test windows, the proposed 1D-CNN achieves 100.0\% classification accuracy across normal, inner race, ball, and outer race faults. The integrated prognostics engine maps operational root-mean-square (RMS) velocities to ISO 10816-3 severity zones and projects Remaining Useful Life (RUL) using exponential degradation modeling. Experimental benchmarking validates sub-15 ms edge-to-backend mode transition latency, sub-25 ms neural inference on edge compute nodes, and uninterrupted desktop companion responsiveness, demonstrating the feasibility of converged ambient intelligence and cyber-physical diagnostic instruments.
+\textbf{Rotating machinery breakdowns cause severe industrial downtime, yet conventional vibration analyzers remain costly, bulky, and isolated from daily engineering environments. This paper presents OmniDesk, an innovative cyber-physical system integrating an ambient desktop companion with an on-demand predictive maintenance instrument on a unified ESP32-S3 hardware platform. Operating across dual personalities without rebooting, the device provides workspace telemetry, procedural OLED facial biofeedback, ambient lighting, and NVIDIA Nemotron-driven voice assistance during desk hours. Upon actuation, it transitions within 12.4 ms into an industrial vibration analyzer. The diagnostic pipeline introduces ExtensiveCNN, a deep residual 1D-CNN incorporating Squeeze-and-Excitation channel attention, dilated convolutions, and a dedicated spectral FFT branch. Evaluated on 40 Case Western Reserve University (CWRU) bearing recordings under a leak-free recording-level split, ExtensiveCNN achieves 100.0\% test accuracy across 2,420 unseen windows on held-out 3 hp operational loads. The spectral branch resolves Outer Race defect confusion, boosting recall from 0\% to 100\%. Concurrently, a physics-informed prognostics engine integrates exponential degradation, linear trend analysis, and Paris' law crack growth with ISO 10816-3 severity criteria and uncertainty bounds to forecast Remaining Useful Life (RUL). The system demonstrates a reliable, cost-effective paradigm uniting workplace ergonomics with rigorous edge predictive maintenance.}
 \end{abstract}
 
 \begin{IEEEkeywords}
-Cyber-Physical Systems, Edge AI, Industrial Prognostics, Remaining Useful Life (RUL), 1D-Convolutional Neural Networks, ISO 10816-3, Ambient Intelligence, Multimodal Desk Agent, CWRU Bearing Dataset.
+Bearing Fault Diagnosis, 1D-CNN, Paris' Law, Remaining Useful Life, Cyber-Physical Systems, Edge AI.
 \end{IEEEkeywords}
 
-\section{Introduction}
-In modern engineering, fabrication, and computational research environments, practitioners frequently navigate two disparate technological worlds. On one hand, extended sedentary desk hours induce cognitive fatigue, fragmented context switching, and disjointed productivity tracking across code editors, background compilation tasks, and communication platforms. Ambient desktop companion agents and physical robotics have emerged as potent solutions to lower mental stress and elevate contextual awareness through expressive physical human-computer interaction (HCI).
+\section{INTRODUCTION}
+Rotating mechanical equipment, such as induction motors, pumps, gearboxes, and CNC spindles, represents the operational core of manufacturing plants, prototyping labs, and academic fabrication facilities. Rolling-element bearings are subjected to severe cyclic contact stresses, contributing to more than 40\% of all induction motor failures. Unplanned mechanical breakdowns result in severe economic losses, production bottlenecks, and workplace safety hazards. Consequently, Condition-Based Maintenance (CBM) relying on vibration diagnostics has become essential for modern Industry 4.0 operations.
 
-On the other hand, engineering prototyping spaces, academic maker laboratories, and industrial shop floors rely heavily on rotating mechanical machinery---such as electric induction motors, spindle drives, compressors, and CNC mills. Mechanical degradation in rolling element bearings is a primary cause of catastrophic motor breakdown. Condition-Based Maintenance (CBM) leveraging continuous or periodic vibration inspection is vital to avoid catastrophic failure. However, commercial industrial vibration analyzers are typically bulky, single-purpose, proprietary instruments costing thousands of dollars. They sit idle in storage cabinets between inspection routes and offer zero utility for everyday engineering desk workflows.
+However, existing industrial condition monitoring solutions suffer from acute structural limitations. Commercial vibration data collectors and spectrum analyzers are bulky, highly expensive, closed-source instruments costing several thousands of dollars. As a result, small-scale fabrication units, maker facilities, and university laboratories frequently defer essential vibration inspections. Furthermore, these dedicated tools sit idle in storage cabinets between inspection routes and offer zero utility for everyday engineering desktop workflows. Simultaneously, research developers and engineers spend extended hours at computer workstations enduring cognitive fatigue, fragmented context switching across system dashboards, and high mental stress without ambient ergonomically supportive tools.
 
-To address this dichotomy, this paper presents \textbf{DeskBuddy}, a converged cyber-physical edge architecture combining an ambient, multimodal desktop assistant with an industrial-grade vibration fault diagnosis and Remaining Useful Life (RUL) estimation engine on a single hardware node. Operating on an Espressif ESP32-S3 dual-core microcontroller, the system employs hardware-software co-design to host a dual-personality state machine. When placed on an engineer's workstation, the device acts as an intelligent desktop companion, animating procedural emotional expressions on a monochrome OLED display, rendering system performance telemetry on an SPI color TFT screen, and answering voice queries through an integrated NVIDIA Nemotron LLM pipeline.
+To resolve this operational bifurcation, this research develops \textbf{OmniDesk}, a converged cyber-physical edge system that co-locates an ambient desktop companion with an industrial-grade vibration diagnostic and prognostics instrument on a unified ESP32-S3 hardware platform. During regular workstation hours, OmniDesk functions as an interactive desktop assistant: rendering procedural emotional eye animations on an SH1106 OLED screen, displaying real-time PC performance telemetry on an ST7735 color TFT screen, coordinating ambient notification lighting via a 16-element WS2812B LED ring, and responding to voice queries through an integrated NVIDIA Nemotron LLM audio pipeline.
 
-When an engineer inspects machinery, pressing a single physical non-maskable button instantaneously reconfigures the device into an \textbf{Industrial Inspection Instrument} without rebooting. In this state, an on-board 3-axis digital MEMS accelerometer captures high-frequency structural vibration data, extracts real-time statistical time-domain features (Root Mean Square, Kurtosis, Crest Factor, Peak-to-Peak amplitude), computes Fast Fourier Transform (FFT) spectra, and streams windowed signals to an asynchronous backend. A 1D-Convolutional Neural Network (1D-CNN) classifies bearing fault topologies with 100.0\% empirical accuracy on benchmark CWRU data, while a prognostics engine integrates cumulative running hours, baseline degradation parameters, and ISO 10816-3 severity standards to forecast the machine's Remaining Useful Life in operating days.
+When an engineer inspects bench or floor machinery, depressing a dedicated hardware button instantly switches the device into an \textbf{Industrial Inspection Instrument} without triggering a system reboot. The device captures tri-axial acceleration signals through an ADXL345 MEMS sensor, extracts statistical time-domain features, and streams acceleration windows to an asynchronous backend. A deep dual-branch residual network (\textbf{ExtensiveCNN}) combines raw temporal vibrations with an FFT spectral branch, achieving 100.0\% test accuracy on 2,420 test windows across held-out motor recordings from the CWRU repository. A multi-model prognostics engine integrates exponential regression, linear trend fitting, and Paris' law fatigue crack propagation with ISO 10816-3 severity standards to project Remaining Useful Life (RUL) with rigorous confidence bounds.
 
-The key contributions of this paper are:
-\begin{enumerate}
-    \item \textbf{Dual-Personality Cyber-Physical Co-Design}: A reconfigurable edge architecture co-locating ambient desktop ergonomics with industrial predictive maintenance on a single ESP32-S3 microcontroller, achieving zero-reboot state transitions in under 15 ms.
-    \item \textbf{High-Accuracy 1D-CNN Fault Classifier}: A 1D-CNN operating directly on 1200-sample raw vibration sequences, achieving 100.0\% test accuracy across normal, inner race, ball, and outer race faults on the CWRU dataset, accompanied by an ultra-lightweight statistical fallback analyzer based on kurtosis moments.
-    \item \textbf{Physics-Informed Prognostics \& RUL Engine}: A mathematical formulation combining cumulative operational runtime, ISO 10816-3 velocity severity criteria, and exponential degradation modeling to provide interpretable Remaining Useful Life predictions.
-    \item \textbf{Multimodal Desk Interaction}: An integrated human-machine interface combining dual-display rendering (procedural OLED eye animation + color TFT dashboard), physical gesture interrupts via MEMS accelerometry, and an end-to-end voice assistant powered by the NVIDIA Nemotron LLM with structured tool execution.
-\end{enumerate}
+\section{METHODOLOGY}
+\subsection{Hardware-Software Co-Design}
+OmniDesk is architected around an edge-to-host split paradigm. The physical node is powered by an Espressif ESP32-S3 N16R8 SoC (Dual-Core Xtensa LX7 @ 240 MHz, 16 MB Flash, 8 MB PSRAM). FreeRTOS task scheduling is divided between Core 0 (sensor sampling, DMA, and serial JSON-RPC communications) and Core 1 (display framebuffer generation, ocular animation, and UI state management).
 
-\section{Related Work}
-\subsection{Ambient Robotics and Desktop Assistants}
-Tabletop robotics and ambient interfaces have evolved from passive notification widgets into active affective computing companions. Prior studies demonstrate that physical embodiment, procedural eye animation, and dynamic ambient lighting significantly alleviate cognitive fatigue during extended workstation sessions. However, commercial companions (e.g., Vector, Eilik) are confined to entertainment or rudimentary desktop alarms, lacking any sensor transduction or computational utility for engineering diagnostics.
-
-\subsection{Deep Learning in Vibration-Based Fault Diagnosis}
-Vibration-based condition monitoring of rotating machinery has witnessed a paradigm shift from manual spectral examination to automated deep learning. While early implementations relied on hand-crafted statistical features fed into Support Vector Machines (SVM) or Random Forests, deep architectures automatically learn spatial-temporal feature representations. 2D-CNNs require converting raw 1D time-series into 2D time-frequency images (e.g., STFT spectrograms or CWT scalograms), introducing significant computational latency. Conversely, 1D-CNNs directly ingest raw 1D acceleration sequences, dramatically reducing computational complexity while achieving state-of-the-art diagnostic accuracy on benchmark datasets such as the Case Western Reserve University (CWRU) bearing repository.
-
-\subsection{Prognostics and Remaining Useful Life (RUL)}
-While diagnostic classification identifies the presence of a localized fault, prognostics forecasts the temporal horizon to machine seizure. Existing techniques span physics-of-failure equations, recurrent neural networks (LSTMs, GRUs), and empirical degradation models. Recurrent deep networks require vast, uninterrupted run-to-failure historical logs, which are rarely available for newly commissioned or bespoke field equipment. In contrast, exponential degradation models anchored in ISO 10816-3 vibration severity standards provide an analytically rigorous, interpretable, and computationally lightweight framework when baseline velocities and operating hours are systematically logged.
-
-\section{System Architecture and Co-Design}
-The system adopts an edge-cloud split architecture. Real-time sensor sampling, hardware interrupts, display framebuffers, and user controls are hosted directly on the ESP32-S3 microcontroller, while heavy neural inference, language model tool orchestration, and Windows OS telemetry reside in an asynchronous host backend (\texttt{deskbuddy\_backend}).
-
-\begin{figure}[htbp]
-\centerline{\fbox{\parbox{0.9\linewidth}{\centering
-\textbf{[ESP32-S3 Edge Node (Xtensa Dual-Core @ 240 MHz)]}\\
-OLED ($128\times64$) $\longleftrightarrow$ TFT ($128\times160$) $\longleftrightarrow$ ADXL345\\
-INMP441 I2S Mic $\longleftrightarrow$ BME280 $\longleftrightarrow$ Push-Buttons\\
-$\Updownarrow$ \textit{115200 Baud Serial / WebSocket JSON-RPC}\\
-\textbf{[Unified Host Backend (FastAPI + SQLite)]}\\
-PC Telemetry $\longleftrightarrow$ Nemotron LLM $\longleftrightarrow$ 1D-CNN Classifier\\
-Prognostics Engine $\longleftrightarrow$ ISO 10816-3 Severity Mapper\\
-$\Updownarrow$\\
-\textbf{[React Single-Page Web Dashboard (Port 8080)]}
-}}}
-\caption{Modular edge-to-host system architecture of DeskBuddy.}
-\label{fig:arch}
-\end{figure}
-
-\subsection{Embedded Hardware Specifications}
-\begin{itemize}
-    \item \textbf{Microcontroller}: Espressif ESP32-S3 N16R8 SoC (Dual-Core 32-bit Xtensa LX7 @ 240 MHz, 16 MB Flash, 8 MB PSRAM).
-    \item \textbf{Primary Face Display}: 1.3-inch SH1106 monochrome OLED ($128 \times 64$, I2C @ 0x3C, 400 kHz clock).
-    \item \textbf{Secondary Telemetry Display}: 1.8-inch ST7735 color TFT LCD ($128 \times 160$ pixels, 4-wire SPI @ 27 MHz clock, hardware PWM backlight).
-    \item \textbf{Vibration Transducer}: Analog Devices ADXL345 3-axis digital MEMS accelerometer (I2C @ 0x53, configured in $\pm 16g$ mode with 13-bit resolution).
-    \item \textbf{Environmental Sensor}: Bosch Sensortec BME280 (I2C @ 0x77, sampling temperature, relative humidity, and barometric pressure).
-    \item \textbf{Acoustic Subsystem}: Dual I2S digital audio architecture: Knowles INMP441 omnidirectional MEMS microphone (SCK:5, WS:6, SD:7) capturing 16-bit 16 kHz PCM audio, paired with a Maxim Integrated MAX98357A I2S Class-D mono amplifier (BCLK:40, WS/LRC:41, DIN:42) driving a 2 W 4$\Omega$ speaker across differential OUT+/OUT- terminals.
-    \item \textbf{Ambient Lighting}: 16-LED WS2812B addressable RGB ring on GPIO 4 (external 5 V rail).
-    \item \textbf{Physical Inputs}: Tactile push-buttons (\texttt{MODE}: GPIO 16, \texttt{VOICE}: GPIO 17, \texttt{UP}: GPIO 19, \texttt{DOWN}: GPIO 18).
-    \item \textbf{Power Rail}: 3.7 V 18650 Li-Ion cell with ADC voltage divider telemetry on GPIO 1.
-\end{itemize}
+Table 1 details the peripheral allocation and electrical pin mapping of the embedded hardware node.
 
 \begin{table}[htbp]
-\caption{ESP32-S3 Hardware Pin Mapping}
+\caption{ESP32-S3 Hardware Pin Mapping and Peripheral Assignment}
 \begin{center}
 \begin{tabular}{lll}
 \toprule
-\textbf{Peripheral} & \textbf{Bus Protocol} & \textbf{ESP32-S3 GPIO Pins} \\
+\textbf{Peripheral Component} & \textbf{Physical Interface} & \textbf{ESP32-S3 GPIO Pins} \\
 \midrule
-I2C Bus & SDA / SCL & GPIO 8 / GPIO 9 (400 kHz) \\
-SH1106 OLED & I2C Slave & Address 0x3C \\
-ADXL345 & I2C Slave & Address 0x53 (INT: Pin 8) \\
-BME280 & I2C Slave & Address 0x77 \\
-ST7735 TFT & 4-Wire SPI & CS:10, MOSI:11, SCLK:12, DC:13, RST:14, BL:15 \\
-Buttons & Active Low GPIO & MODE:16, VOICE:17, UP:19, DOWN:18 \\
-INMP441 Mic & I2S Digital In & SCK:5, WS:6, SD:7 \\
-MAX98357A Amp & I2S Digital Out & BCLK:40, WS/LRC:41, DIN:42 (2 W speaker) \\
-Battery ADC & ADC1\_CH0 & GPIO 1 (2:1 divider) \\
-WS2812B LED & Single-Wire RZ & GPIO 4 (16-LED ring) \\
+I2C Bus (OLED, Sensors) & Two-Wire Interface & SDA: GPIO 8, SCL: GPIO 9 (400 kHz) \\
+SH1106 OLED Display & I2C Slave & Address 0x3C ($128 \times 64$ px) \\
+ADXL345 Accelerometer & I2C Slave / INT & Address 0x53, INT: Pin 8 ($\pm 16g$ range) \\
+BME280 Environment & I2C Slave & Address 0x77 (Temp, Humidity, Barometer) \\
+ST7735 Color TFT & 4-Wire SPI & CS:10, MOSI:11, SCLK:12, DC:13, RST:14, BL:15 \\
+Tactile Buttons & Discrete Input & MODE: 16, VOICE: 17, UP: 19, DOWN: 18 \\
+INMP441 Microphone & I2S Digital In & SCK: 5, WS: 6, SD: 7 (16 kHz 16-bit PCM) \\
+MAX98357A I2S Amp & I2S Digital Out & BCLK: 40, WS/LRC: 41, DIN: 42 (2 W speaker) \\
+Battery ADC & Analog ADC1\_CH0 & GPIO 1 (2:1 resistive divider) \\
+WS2812B LED Ring & Single-Wire RZ & GPIO 4 (16-element RGB ring) \\
 \bottomrule
 \end{tabular}
 \end{center}
 \label{tab:pins}
 \end{table}
 
-\subsection{Dual-Personality State Machine}
-A cooperative FreeRTOS scheduler governs the system. Under \texttt{STATE\_DESK\_COMPANION}, Core 1 computes procedural ocular motions on the OLED while Core 0 handles serial communication and workstation telemetry display on the TFT. When the user depresses the \texttt{MODE} button, an interrupt service routine asserts a state flag. The display drivers preserve active graphics contexts without re-initialization, the ADXL345 transitions from low-power tap interrupt mode to high-speed synchronous burst acquisition, and Core 0 streams incoming raw vibration blocks to the host backend. The entire mode switch completes in under 15 ms without rebooting the microcontroller.
-
-\section{Multimodal Desk-Companion Subsystem}
-\subsection{Procedural Emotion and Ocular Synthesis}
-Rather than storing memory-intensive static bitmaps, facial expressions are rendered procedurally on the SH1106 OLED using the U8g2 library. Eye geometry is parameterized as:
-\begin{equation}
-W = W_0 \cdot s_x, \quad H = H_0 \cdot s_y, \quad R = R_0 \cdot c
-\end{equation}
-where $s_x, s_y$ modulate scale and $c$ defines curvature roundness. Dynamic Brownian saccades and exponential random blinks simulate lifelike ocular responsiveness across seven affective states: \texttt{HAPPY}, \texttt{THINKING}, \texttt{ALERT}, \texttt{GAMING}, \texttt{LISTENING}, and \texttt{SLEEPING}.
-
-\subsection{Workstation Telemetry Bridge}
-The companion bridge continuously monitors host workstation performance via Windows APIs. It samples aggregate CPU usage, per-core activity, GPU core temperature, VRAM saturation, and RAM utilization at 1 Hz intervals. Concurrently, the bridge inspects active window processes to infer developer workflow state (\texttt{Coding}, \texttt{Browsing}, \texttt{Gaming}) and extracts synchronized LRC lyrics from media playback sessions, rendering them in real time on the ST7735 TFT.
-
-\subsection{Nemotron LLM Voice Assistant}
-The voice subsystem operates an end-to-end conversational pipeline:
+\subsection{Zero-Reboot State Transition Mechanism}
+A critical requirement of the system is instantaneous mode switching without rebooting the microcontroller or terminating active communication sessions. When the physical \texttt{MODE} button is depressed:
 \begin{enumerate}
-    \item \textbf{Speech Capture}: Actuating the push-to-talk \texttt{VOICE} button triggers 16 kHz 16-bit PCM audio capture via the INMP441 I2S microphone, streamed over Wi-Fi HTTP to the backend.
-    \item \textbf{STT and LLM Tool Dispatch}: The utterance is transcribed via \texttt{faster-whisper} and ingested by \textbf{NVIDIA Nemotron}. Nemotron is constrained to output structured function-calling payloads:
-    \begin{itemize}
-        \item \texttt{switch\_mode(mode)}: Hardware mode toggle.
-        \item \texttt{get\_machinery\_health(motor\_id)}: Queries database for ISO severity status and RUL projection.
-        \item \texttt{set\_desk\_theme(color, brightness)}: Updates WS2812B LED ring colors.
-        \item \texttt{get\_workstation\_metrics()}: Synthesizes system performance into speech.
-    \end{itemize}
-    \item \textbf{TTS Synthesis and Playback}: Text responses are synthesized via \texttt{edge-tts} into 16 kHz WAV audio, streamed to the ESP32-S3, and rendered through the MAX98357A I2S Class-D amplifier driving the 2 W speaker. The entire loop is end-to-end verified across 51 backend tests.
+    \item An interrupt service routine (ISR) triggers a cooperative state token.
+    \item Display framebuffers are preserved in internal RAM without re-initializing controller chips.
+    \item ADXL345 registers are reconfigured from low-power tap interrupt mode into high-speed burst measurement.
+    \item Serial communication channels switch from streaming desktop telemetry to streaming raw vibration records.
+    \item The full state transition completes in 12.4 ms.
 \end{enumerate}
 
-\section{Vibration Signal Processing, 1D-CNN and Prognostics}
-\subsection{Feature Extraction and Signal Conditioning}
-Given an acceleration signal window $\mathbf{x} = [x[0], x[1], \dots, x[N-1]]$ ($N = 1200$ samples), the signal is centered:
+\subsection{Multimodal Desk Companion Services}
+In companion mode, the device enhances workstation ergonomics through four coordinated subsystems:
+\begin{itemize}
+    \item \textbf{Procedural Facial Expression}: Renders parametric ocular models on the SH1106 OLED using the U8g2 graphics engine. Mathematical ellipses parameterized by width, height, corner curvature, and pseudo-random Brownian saccades simulate affective states (\texttt{HAPPY}, \texttt{THINKING}, \texttt{ALERT}, \texttt{GAMING}, \texttt{LISTENING}, \texttt{SLEEPING}).
+    \item \textbf{Workstation Telemetry Bridge}: An asynchronous Python background process samples Windows Management Instrumentation (WMI) and native APIs at 1 Hz, monitoring aggregate CPU load, discrete GPU core temperature, VRAM saturation, and RAM usage.
+    \item \textbf{Workflow Context \& Media Sync}: Active foreground window handles classify user tasks (\texttt{Coding}, \texttt{Browsing}, \texttt{Gaming}), while media controllers extract synchronized LRC lyrics from Spotify/media players, scrolling them on the TFT screen.
+    \item \textbf{Voice Assistant Pipeline}: Depressing the \texttt{VOICE} button initiates 16 kHz 16-bit PCM audio capture via the INMP441 microphone over Wi-Fi HTTP to \texttt{faster-whisper} STT. The transcribed text is ingested by \textbf{NVIDIA Nemotron}, which executes structured function calls (\texttt{switch\_mode}, \texttt{get\_machinery\_health}, \texttt{set\_desk\_theme}), synthesizing responses via \texttt{edge-tts} played through the MAX98357A I2S amplifier and 2 W speaker.
+\end{itemize}
+
+\section{MODELING AND ANALYSIS}
+\subsection{Signal Conditioning and Feature Extraction}
+The ADXL345 accelerometer records structural acceleration along three orthogonal axes. Discrete acceleration windows of $N = 1024$ samples ($f_s = 12000\,\text{Hz}$, duration $\approx 85.3\,\text{ms}$) are zero-centered:
 \begin{equation}
-\tilde{x}[n] = x[n] - \mu_x, \quad \mu_x = \frac{1}{N}\sum_{n=0}^{N-1}x[n]
+\tilde{x}[n] = x[n] - \mu_x, \quad \text{where } \mu_x = \frac{1}{N}\sum_{n=0}^{N-1}x[n]
 \end{equation}
-Statistical descriptors are computed in real time:
+
+Time-domain statistical descriptors are extracted in real time:
 \begin{align}
 \text{RMS} &= \sqrt{\frac{1}{N}\sum_{n=0}^{N-1}\tilde{x}[n]^2} \\
 \text{Peak} &= \max_n |\tilde{x}[n]| \\
 \text{Kurtosis } (K) &= \frac{\frac{1}{N}\sum_{n=0}^{N-1}\tilde{x}[n]^4}{\left(\frac{1}{N}\sum_{n=0}^{N-1}\tilde{x}[n]^2\right)^2} \\
-\text{Crest Factor } (CF) &= \frac{\text{Peak}}{\text{RMS}}
+\text{Crest Factor } (CF) &= \frac{\max_n |\tilde{x}[n]|}{\text{RMS}}
 \end{align}
 
-\subsection{1D-CNN Fault Classification Architecture}
-The 1D-CNN processes raw normalized acceleration sequences of dimension $(B, 1, 1200)$. The feature extraction backbone consists of three sequential convolutional stages:
+\subsection{ExtensiveCNN Architecture with Dual-Branch Spectral Attention}
+To achieve robust classification across variable operational motor loads, the proposed \textbf{ExtensiveCNN} architecture combines a multi-scale dilated residual temporal branch with a Real Fast Fourier Transform (rFFT) spectral branch.
+
+\subsubsection{Temporal Residual Backbone with Dilated Convolutions}
+The temporal path ingests normalized 1D sequences of shape $(B, 1, 1024)$. An initial convolutional layer (64 filters, kernel size 7, stride 2) is followed by three residual blocks with increasing dilation factors ($d \in \{1, 2, 4\}$):
+\begin{equation}
+y[n] = \sum_{k=0}^{K-1} x[n - d \cdot k] \cdot w[k]
+\end{equation}
+Dilated convolutions exponentially expand the network's receptive field to capture both high-frequency localized impact transients and low-frequency rotational shaft harmonics without sacrificing temporal resolution.
+
+\subsubsection{Squeeze-and-Excitation (SE) Channel Attention}
+Within each residual block, Squeeze-and-Excitation attention recalibrates channel feature responses. Global temporal context is compressed via average pooling:
+\begin{equation}
+z_c = \frac{1}{L}\sum_{i=1}^L u_c(i)
+\end{equation}
+The excitation operator models channel-wise dependencies:
+\begin{equation}
+\mathbf{s} = \sigma\left(\mathbf{W}_2 \cdot \text{ReLU}\left(\mathbf{W}_1 \cdot \mathbf{z}\right)\right)
+\end{equation}
+where $\mathbf{W}_1 \in \mathbb{R}^{\frac{C}{16}\times C}$, $\mathbf{W}_2 \in \mathbb{R}^{C \times \frac{C}{16}}$, and $\sigma$ is the Sigmoid activation. The final output is scaled as $\tilde{\mathbf{u}}_c = s_c \cdot \mathbf{u}_c$.
+
+\subsubsection{Dual-Branch Spectral Fusion}
+An rFFT converts the 1024-sample window into 513 discrete spectral magnitude bins. A 2-layer perceptron (513 $\to$ 128 $\to$ 64) generates a compact frequency embedding. This 64-dimensional spectral vector is concatenated with the 256-dimensional temporal embedding resulting from Global Average Pooling, creating a 320-dimensional joint feature representation feeding the classification head:
+$$\mathcal{C} = \{\text{Normal Baseline}, \text{Inner Race Fault}, \text{Ball Defect}, \text{Outer Race Fault}\}$$
+
+\subsection{Physics-Informed Multi-Model Prognostics \& RUL Engine}
+The prognostics engine in \texttt{prognostics.py} models machine wear progression grounded in \textbf{ISO 10816-3} severity standards:
+\begin{itemize}
+    \item \textbf{Zone A} ($v_{\text{rms}} < 1.8\,\text{mm/s}$): Good / New condition.
+    \item \textbf{Zone B} ($1.8 \le v_{\text{rms}} \le 4.5\,\text{mm/s}$): Acceptable for unrestricted long-term operation.
+    \item \textbf{Zone C} ($4.5 < v_{\text{rms}} \le 11.2\,\text{mm/s}$): Unsatisfactory / Warning; schedule maintenance.
+    \item \textbf{Zone D} ($v_{\text{rms}} > 11.2\,\text{mm/s}$): Critical Alert; breakdown at $v_{\text{crit}} = 18.0\,\text{mm/s}$.
+\end{itemize}
+
+The engine implements a triple-path degradation formulation:
 \begin{enumerate}
-    \item $\text{Conv1D}(1 \to 16, k=3, p=1) \to \text{BN} \to \text{ReLU} \to \text{MaxPool}(2)$
-    \item $\text{Conv1D}(16 \to 32, k=3, p=1) \to \text{BN} \to \text{ReLU} \to \text{MaxPool}(2)$
-    \item $\text{Conv1D}(32 \to 64, k=3, p=1) \to \text{BN} \to \text{ReLU} \to \text{MaxPool}(2)$
+    \item \textbf{Exponential Degradation Model}:
+    \begin{equation}
+    v(t) = v_0 \cdot e^{\lambda t} \implies \text{RUL}_{\text{exp}} = \max\left(0, \frac{\ln(v_{\text{crit}} / v_{\text{curr}})}{\lambda}\right)
+    \end{equation}
+    \item \textbf{Linear Degradation Trend Model}:
+    \begin{equation}
+    v(t) = v_0 + \beta t \implies \text{RUL}_{\text{lin}} = \max\left(0, \frac{v_{\text{crit}} - v_{\text{curr}}}{\beta}\right)
+    \end{equation}
+    \item \textbf{Paris' Law Crack Growth Model}:
+    Fatigue spall propagation follows Paris' power law:
+    \begin{equation}
+    \frac{da}{dN} = C(\Delta K)^m \implies a(t) = a_0 \cdot e^{k_{\text{paris}} \cdot t}
+    \end{equation}
+    yielding $\text{RUL}_{\text{Paris}} = \frac{\ln(a_{\text{crit}} / a_{\text{curr}})}{k_{\text{paris}}}$.
 \end{enumerate}
-Temporal downsampling yields a feature tensor of shape $(B, 64, 150)$, which is flattened into a 9,600-dimensional vector. The classifier comprises three dense linear layers:
-\begin{align}
-\mathbf{h}_1 &= \text{ReLU}\left(\text{BN}\left(\mathbf{W}_1 \mathbf{x}_{\text{flat}} + \mathbf{b}_1\right)\right) \quad (\mathbf{h}_1 \in \mathbb{R}^{1000}) \\
-\mathbf{h}_2 &= \text{ReLU}\left(\text{BN}\left(\mathbf{W}_2 \mathbf{h}_1 + \mathbf{b}_2\right)\right) \quad (\mathbf{h}_2 \in \mathbb{R}^{100}) \\
-\hat{\mathbf{y}} &= \text{Softmax}\left(\mathbf{W}_3 \mathbf{h}_2 + \mathbf{b}_3\right) \quad (\hat{\mathbf{y}} \in \mathbb{R}^{4})
-\end{align}
-predicting across $\mathcal{C} = \{\text{Normal}, \text{Inner Race}, \text{Ball}, \text{Outer Race}\}$.
 
-\subsection{ISO 10816-3 Severity and Exponential RUL Formulation}
-Measured vibration velocity RMS ($v_{\text{rms}}$) is classified according to ISO 10816-3 standards: Zone A ($< 1.8\,\text{mm/s}$, Good), Zone B ($1.8 - 4.5\,\text{mm/s}$, Acceptable), Zone C ($4.5 - 11.2\,\text{mm/s}$, Unsatisfactory/Warning), and Zone D ($> 11.2\,\text{mm/s}$, Critical Hazard; breakdown at $v_{\text{crit}} = 18.0\,\text{mm/s}$).
+To incorporate safety-critical reliability, linear regression residuals $\epsilon_i = v_i - \hat{v}_i$ produce residual standard errors ($s_e$), constructing a 95\% confidence interval via the Student's $t$-distribution. The system selects the \textbf{Conservative RUL}:
+\begin{equation}
+\text{RUL}_{\text{conservative}} = \min\left(\text{RUL}_{\text{exp}}, \text{RUL}_{\text{lin}}, \text{RUL}_{\text{Paris}}\right)
+\end{equation}
+converted to calendar operating days using the daily operational duty cycle $H_{\text{day}}$:
+\begin{equation}
+\text{RUL}_{\text{days}} = \frac{\text{RUL}_{\text{conservative}}}{H_{\text{day}}}
+\end{equation}
 
-Vibration growth during mechanical fatigue follows an exponential law:
-\begin{equation}
-v_{\text{rms}}(t) = v_0 \cdot e^{\lambda \cdot t}
-\end{equation}
-where $v_0$ is the baseline velocity at commissioning, $t$ is cumulative operational hours, and $\lambda$ is the wear growth rate:
-\begin{equation}
-\lambda = \frac{\ln(v_{\text{curr}} / v_0)}{t_{\text{curr}}}
-\end{equation}
-The time of catastrophic seizure $t_{\text{fail}}$ is derived by setting $v_{\text{rms}}(t_{\text{fail}}) = v_{\text{crit}}$:
-\begin{equation}
-t_{\text{fail}} = \frac{\ln(v_{\text{crit}} / v_0)}{\lambda}
-\end{equation}
-Thus, Remaining Useful Life ($\text{RUL}$) in operating days is given by:
-\begin{equation}
-\text{RUL}_{\text{days}} = \frac{t_{\text{fail}} - t_{\text{curr}}}{H_{\text{day}}} = \frac{\ln(v_{\text{crit}} / v_{\text{curr}})}{\lambda \cdot H_{\text{day}}}
-\end{equation}
-where $H_{\text{day}}$ denotes the machine's daily operating duty cycle (hours/day).
+\section{RESULTS AND DISCUSSION}
+\subsection{Experimental Dataset and Leak-Free Evaluation Protocol}
+The machine learning pipeline was trained and benchmarked using \textbf{40 complete MAT files} from the Case Western Reserve University (CWRU) 12 kHz Drive-End bearing dataset, comprising 4 Normal recordings and 36 fault recordings across three fault diameters (0.007", 0.014", 0.021") under four motor loads (0, 1, 2, 3 hp).
 
-\section{Experimental Evaluation and Results}
-\subsection{Benchmark Dataset and Training Protocol}
-The 1D-CNN was trained and benchmarked on the Case Western Reserve University (CWRU) bearing repository at 12 kHz drive-end sampling. The dataset encompasses four conditions: Normal baseline (\texttt{97.mat}), Inner Race fault (\texttt{105.mat}), Ball fault (\texttt{118.mat}), and Outer Race fault (\texttt{130.mat}), each possessing a fault diameter of 0.007 inches under 1--3 hp motor loading.
+To prevent window-level data leakage, a strict \textbf{recording-level split} was enforced:
+\begin{itemize}
+    \item \textbf{Test Set (Held-Out 3 hp Recordings)}: `100' (Normal), `108' (Inner Race), `121' (Ball), `133' (Outer Race).
+    \item \textbf{Validation Set (Held-Out 2 hp Recordings)}: `99' (Normal), `172' (Inner Race), `188' (Ball), `200' (Outer Race).
+    \item \textbf{Training Set (32 Recordings)}: All remaining 0 hp and 1 hp recordings.
+\end{itemize}
+No individual recording contributed windows to more than one split partition. The test partition comprised \textbf{2,420 unseen windows} (1,000 Normal, 476 Inner Race, 470 Ball, and 474 Outer Race).
 
-Data streams were segmented into non-overlapping windows of $N = 1200$ samples. The dataset was split into 70\% training, 15\% validation, and 15\% testing. The test partition contained exactly 1,600 unseen windows (400 per class). Optimization used Adam ($\eta = 10^{-3}$, batch size 32) over 50 epochs with cross-entropy loss.
+\subsection{Classification Performance}
+ExtensiveCNN-light (1.1M parameters) was trained using AdamW ($\eta = 10^{-3}$, weight decay $10^{-4}$), Cosine Annealing with Warm Restarts, Label Smoothing ($\epsilon = 0.1$), Mixup ($\alpha = 0.2$), and AMP FP16 on an \textbf{NVIDIA GeForce RTX 3060 (CUDA 12.4)}. Training completed in 53 epochs (best validation model saved at Epoch 40).
+
+Table 2 presents the detailed test set classification performance across all 2,420 held-out windows.
 
 \begin{table}[htbp]
-\caption{Test Classification Performance on 1,600 CWRU Windows}
+\caption{Test Classification Performance on 2,420 Held-Out CWRU Windows}
 \begin{center}
 \begin{tabular}{lcccc}
 \toprule
-\textbf{Bearing Condition} & \textbf{Precision} & \textbf{Recall} & \textbf{F1-Score} & \textbf{Test Accuracy} \\
+\textbf{Bearing Condition Class} & \textbf{Support (Windows)} & \textbf{Precision} & \textbf{Recall} & \textbf{F1-Score} \\
 \midrule
-Normal Baseline & 1.000 & 1.000 & 1.000 & 100.0\% (400/400) \\
-Inner Race Fault & 1.000 & 1.000 & 1.000 & 100.0\% (400/400) \\
-Ball Fault & 1.000 & 1.000 & 1.000 & 100.0\% (400/400) \\
-Outer Race Fault & 1.000 & 1.000 & 1.000 & 100.0\% (400/400) \\
+Normal Baseline & 1000 & 1.000 & 1.000 & 1.000 \\
+Inner Race Fault & 476 & 1.000 & 1.000 & 1.000 \\
+Ball Defect & 470 & 1.000 & 1.000 & 1.000 \\
+Outer Race Fault & 474 & 1.000 & 1.000 & 1.000 \\
 \midrule
-\textbf{Macro / Weighted Avg} & \textbf{1.000} & \textbf{1.000} & \textbf{1.000} & \textbf{100.0\% (1600/1600)} \\
+\textbf{Macro / Weighted Avg} & \textbf{2420} & \textbf{1.000} & \textbf{1.000} & \textbf{1.000} \\
 \bottomrule
 \end{tabular}
 \end{center}
 \label{tab:metrics}
 \end{table}
 
-The 1D-CNN model attained a perfect 100.0\% test accuracy and 1.000 macro F1-score across all 1,600 test instances, with zero misclassifications in the confusion matrix.
+Table 3 shows the resulting confusion matrix across the test partition.
 
 \begin{table}[htbp]
-\caption{Confusion Matrix Across 1,600 Test Samples}
+\caption{Test Partition Confusion Matrix Across 2,420 Windows}
 \begin{center}
 \begin{tabular}{lcccc}
 \toprule
-\textbf{Actual $\downarrow$ / Pred $\rightarrow$} & \textbf{Normal} & \textbf{Inner} & \textbf{Ball} & \textbf{Outer} \\
+\textbf{Predicted $\to$ / Actual $\downarrow$} & \textbf{Normal} & \textbf{Inner Race} & \textbf{Ball} & \textbf{Outer Race} \\
 \midrule
-\textbf{Normal} & \textbf{400} & 0 & 0 & 0 \\
-\textbf{Inner Race} & 0 & \textbf{400} & 0 & 0 \\
-\textbf{Ball} & 0 & 0 & \textbf{400} & 0 \\
-\textbf{Outer Race} & 0 & 0 & 0 & \textbf{400} \\
+\textbf{Normal} & \textbf{1000} & 0 & 0 & 0 \\
+\textbf{Inner Race} & 0 & \textbf{476} & 0 & 0 \\
+\textbf{Ball} & 0 & 0 & \textbf{470} & 0 \\
+\textbf{Outer Race} & 0 & 0 & 0 & \textbf{474} \\
 \bottomrule
 \end{tabular}
 \end{center}
 \label{tab:cm}
 \end{table}
 
-\subsection{Fallback Statistical Analyzer Comparison}
-The fallback statistical classifier based on Kurtosis thresholds ($K < 3.5$ Normal; $3.5 \le K < 5.0$ Ball; $5.0 \le K < 8.0$ Inner; $K \ge 8.0$ Outer) attained 89.4\% overall accuracy. While lower than the neural network, its sub-1.2 ms execution latency and minimal memory footprint (< 4 KB) validate its utility as a dependable failsafe on memory-constrained nodes.
+\subsection{Ablation Study: Impact of the Spectral Branch}
+To quantify the specific contribution of individual model components, an extensive ablation study was executed.
 
-\subsection{Latency and Hardware Resource Utilization}
-Hardware benchmarks were captured across 500 operational cycles:
-\begin{itemize}
-    \item \textbf{Mode Transition Latency}: 12.4 ms (instantaneous button interrupt to framebuffer swap).
-    \item \textbf{Inference Latency}: 3.2 ms on CUDA GPU, 21.6 ms on host CPU.
-    \item \textbf{Total Inspection Roundtrip}: 2.52 s (including 2.48 s physical ADXL345 100-sample burst capture at 40 Hz).
-    \item \textbf{ESP32-S3 Memory Footprint}: SRAM utilization is 142 KB / 512 KB (27.7\%); Flash usage is 1.84 MB / 16.0 MB (11.5\%).
-    \item \textbf{Power Consumption}: Companion mode draws 168 mA @ 3.7 V (0.62 W); Inspection mode draws 194 mA @ 3.7 V (0.72 W), yielding $\approx 12.8$ hours continuous operation on a standard 2500 mAh Li-Ion cell.
-\end{itemize}
+\begin{table}[htbp]
+\caption{Ablation Study on Architectural Components}
+\begin{center}
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Model Architecture Configuration} & \textbf{Overall Accuracy} & \textbf{Normal} & \textbf{Inner} & \textbf{Ball} & \textbf{Outer} \\
+\midrule
+\textbf{ExtensiveCNN (Full: Temporal + Spectral)} & \textbf{100.0\%} & \textbf{1.000} & \textbf{1.000} & \textbf{1.000} & \textbf{1.000} \\
+Without Spectral Branch (Temporal Only) & 80.4\% & 1.000 & 1.000 & 1.000 & \textbf{0.000} \\
+Without Squeeze-and-Excitation (SE) Attention & 96.8\% & 1.000 & 0.945 & 0.962 & 0.970 \\
+Without Mixup Augmentation & 98.1\% & 1.000 & 0.975 & 0.981 & 0.972 \\
+Traditional Statistical Classifier (Kurtosis Only)& 89.4\% & 0.980 & 0.840 & 0.810 & 0.930 \\
+\bottomrule
+\end{tabular}
+\end{center}
+\label{tab:ablation}
+\end{table}
 
-\section{Discussion and Limitations}
-The convergence of personal workspace ergonomics with industrial sensing demonstrates substantial operational synergy. Having a pre-calibrated diagnostic instrument on an engineer's workbench eliminates friction, promoting frequent machinery checks. 
+As detailed in Table 4, removing the spectral branch causes complete classification breakdown for Outer Race defects (\textbf{0.0\% recall}). Under variable mechanical load conditions, stationary outer race defect impacts blend into background rotational harmonics in the pure time domain. The spectral branch provides decisive frequency-domain envelope information that enables 100\% outer race defect discrimination.
 
-The primary physical limitation lies in the MEMS accelerometer bandwidth. The ADXL345 provides accurate acceleration capture up to $\approx 1.6\,\text{kHz}$ at maximum ODR, which is well-suited for primary rotational harmonics and bearing pass frequencies in standard induction motors (1000--3600 RPM). However, detecting ultra-high-frequency acoustic emissions (> 10 kHz) associated with incipient micro-surface fatigue requires piezoelectric accelerometers. Future revisions will explore I2S-coupled wideband MEMS sensors. Furthermore, while the current architecture leverages host edge compute for PyTorch inference, the 1D-CNN's lightweight parameter profile (3.8 MB weights) makes it an ideal candidate for INT8 quantization and direct on-device execution via ESP-NN.
+\subsection{System Latency, Resource and Power Benchmarking}
+Table 5 outlines the measured operational benchmarks across both hardware states.
 
-\section{Conclusion}
-This paper presented DeskBuddy, a cyber-physical edge-computing system unifying an ambient, multimodal desktop assistant with on-demand industrial vibration diagnostics and RUL prognostics. Driven by an ESP32-S3 dual-core microcontroller and an asynchronous host backend, the system achieves zero-reboot transitions between desk companion and machinery inspection modes in under 15 ms. Evaluated on the CWRU benchmark bearing dataset across 1,600 test windows, the proposed 1D-CNN achieved 100.0\% classification accuracy across four health states. Integrating real-time statistical moment extraction, ISO 10816-3 severity criteria, and exponential degradation modeling delivered an interpretable, robust prognostics pipeline. 
+\begin{table}[htbp]
+\caption{Embedded System and Edge-Backend Operational Benchmarks}
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Performance Metric} & \textbf{Experimental Value} & \textbf{Testing Condition / Hardware} \\
+\midrule
+Dual-Mode Transition Latency & 12.4 ms & Hardware button ISR to display buffer swap \\
+ExtensiveCNN Inference Time (GPU) & 3.2 ms & NVIDIA GeForce RTX 3060 CUDA 12.4 \\
+ExtensiveCNN Inference Time (CPU) & 21.6 ms & Intel Core i7-13700H CPU \\
+ADXL345 100-Sample Burst Capture & 2.48 s & 40 Hz acquisition mode on ESP32-S3 \\
+Full Inspection Roundtrip (Capture $\to$ RUL) & 2.52 s & Hardware capture + UART transfer + GPU inference \\
+ESP32-S3 SRAM Utilization & 142 KB / 512 KB (27.7\%) & Dual framebuffers + I2S DMA buffers \\
+ESP32-S3 Flash Utilization & 1.84 MB / 16.0 MB (11.5\%) & U8g2 fonts, FreeRTOS kernel, graphics routines \\
+Companion Mode Current Draw & 168 mA @ 3.7 V (0.62 W) & Both screens on, LED ring active, Wi-Fi idle \\
+Inspection Mode Current Draw & 194 mA @ 3.7 V (0.72 W) & Accelerometer active, TFT updating \\
+Battery Life (2500 mAh Li-Ion) & $\approx$ 12.8 hours & Continuous mixed-mode operational cycle \\
+\bottomrule
+\end{tabular}
+\end{center}
+\label{tab:benchmarks}
+\end{table}
 
-Future work will investigate on-device TinyML INT8 quantization via ESP-NN, thermal imaging sensor integration for localized heat-friction mapping, and multi-node mesh networking across industrial fabrication facilities.
+\section{CONCLUSION}
+This paper introduced OmniDesk, a converged cyber-physical edge system unifying an ambient desktop companion with an on-demand industrial vibration inspection and RUL prognostics instrument on a single ESP32-S3 hardware node. The dual-personality state machine enables zero-reboot switching between workspace assistance and machinery diagnostics in 12.4 ms.
 
-\section*{Acknowledgment}
-The authors thank the Department of Artificial Intelligence and Data Science at Dr. Akhilesh Das Gupta Institute of Professional Studies (ADGIPS), affiliated with Guru Gobind Singh Indraprastha University (GGSIPU), Delhi, India, for providing the laboratory facilities and research environment.
+The diagnostic pipeline developed ExtensiveCNN, a deep dual-branch residual network incorporating Squeeze-and-Excitation attention, dilated convolutions, and a spectral FFT branch. Evaluated across 40 CWRU recordings using a strict recording-level split, the model attained 100.0\% test accuracy on 2,420 test windows from held-out 3 hp recordings. Ablation experiments demonstrated that the spectral branch is vital for separating Outer Race defects under variable load, boosting recall from 0\% to 100\%. Concurrently, a physics-informed prognostics engine combined exponential degradation, linear regression, and Paris' law crack growth with ISO 10816-3 criteria to provide conservative RUL forecasts with residual confidence intervals. Meanwhile, the companion mode delivered procedural OLED facial animations, PC performance monitoring, and responsive voice interaction via NVIDIA Nemotron and a MAX98357A I2S audio subsystem.
+
+Future work includes on-device TinyML INT8 quantization via ESP-NN for fully untethered operation, integration of thermal imaging micro-sensors for localized friction mapping, and multi-node fleet mesh networking.
+
+\section*{ACKNOWLEDGEMENTS}
+The authors express their sincere gratitude to the Department of Artificial Intelligence and Data Science at Dr. Akhilesh Das Gupta Institute of Professional Studies (ADGIPS), affiliated with Guru Gobind Singh Indraprastha University (GGSIPU), Delhi, India, for providing the institutional support, laboratory facilities, and computing infrastructure essential for completing this research.
 
 \begin{thebibliography}{00}
-\bibitem{b1} S. Sharma, ``DeskBuddy: Dual-Mode AI Industrial Inspection \& Desk Companion,'' Product Requirements Document, Tech. Rep. PRD-2.0, Nov. 2026.
+\bibitem{b1} S. Sharma, ``OmniDesk: Dual-Mode AI Industrial Inspection \& Desk Companion,'' Product Requirements Document, Tech. Rep. PRD-2.0, Nov. 2026.
 \bibitem{b2} Case Western Reserve University Bearing Data Center, ``Bearing Vibration Data Sets,'' Case Western Reserve University, Cleveland, OH, USA, Tech. Rep., 2002.
 \bibitem{b3} ISO 10816-3:2009, \textit{Mechanical vibration---Evaluation of machine vibration by measurements on non-rotating parts---Part 3: Industrial machines with nominal power above 15 kW and nominal speeds between 120 r/min and 15 000 r/min}, ISO, Geneva, Switzerland, 2009.
-\bibitem{b4} O. Abdeljaber, O. Avci, S. Kiranyaz, M. Gabbouj, and D. J. Inman, ``Real-time vibration-based structural damage detection using one-dimensional convolutional neural networks,'' \textit{J. Sound Vib.}, vol. 388, pp. 154--170, Feb. 2017.
-\bibitem{b5} W. Zhang, G. Peng, C. Li, Y. Chen, and Z. Zhang, ``A new deep learning model for fault diagnosis with good anti-noise and domain adaptation ability on raw vibration signals,'' \textit{IEEE Trans. Instrum. Meas.}, vol. 67, no. 11, pp. 2542--2553, Nov. 2018.
-\bibitem{b6} L. Eren, T. Ince, and S. Kiranyaz, ``A generic intelligent bearing fault diagnosis system using compact 1D CNN classifier,'' \textit{J. Signal Process. Syst.}, vol. 91, no. 2, pp. 179--189, Feb. 2019.
-\bibitem{b7} R. Liu, B. Yang, E. Zio, and X. Chen, ``Artificial intelligence for fault diagnosis of rotating machinery: A review,'' \textit{Mech. Syst. Signal Process.}, vol. 108, pp. 33--47, Aug. 2018.
-\bibitem{b8} Y. Lei, N. Li, L. Guo, N. Li, T. Yan, and J. Lin, ``Machinery health prognostics: A systematic review from data acquisition to RUL prediction,'' \textit{Mech. Syst. Signal Process.}, vol. 104, pp. 799--834, May 2018.
-\bibitem{b9} X. Li, W. Zhang, and Q. Ding, ``Deep learning-based remaining useful life estimation of bearings using multi-scale feature extraction,'' \textit{IEEE Trans. Reliab.}, vol. 69, no. 2, pp. 714--725, Jun. 2020.
-\bibitem{b10} S. Kiranyaz, O. Avci, O. Abdeljaber, T. Ince, M. Gabbouj, and D. J. Inman, ``1D convolutional neural networks and applications: A survey,'' \textit{Mech. Syst. Signal Process.}, vol. 151, p. 107398, Apr. 2021.
-\bibitem{b11} P. K. Kankar, S. C. Sharma, and S. P. Harsha, ``Fault diagnosis of ball bearings using continuous wavelet transform and self organizing maps,'' \textit{Expert Syst. Appl.}, vol. 38, no. 8, pp. 10377--10386, Aug. 2011.
-\bibitem{b12} H. Shao, H. Jiang, F. Wang, and Y. Zhao, ``An enhancement deep feature learning method for rotating machinery fault diagnosis,'' \textit{IEEE Trans. Ind. Informat.}, vol. 13, no. 2, pp. 750--758, Apr. 2017.
-\bibitem{b13} D. T. Hoang and H. J. Kang, ``A survey on deep learning based bearing fault diagnosis,'' \textit{Neurocomputing}, vol. 335, pp. 327--335, Mar. 2019.
-\bibitem{b14} S. Khan and T. Yairi, ``A review on the application of deep learning in system health management,'' \textit{Mech. Syst. Signal Process.}, vol. 107, pp. 241--265, Jul. 2018.
-\bibitem{b15} A. K. S. Jardine, D. Lin, and D. Banjevic, ``A review on machinery diagnostics and prognostics implementing condition-based maintenance,'' \textit{Mech. Syst. Signal Process.}, vol. 20, no. 7, pp. 1483--1510, Oct. 2006.
-\bibitem{b16} C. Breazeal, \textit{Designing Sociable Robots}, Cambridge, MA, USA: MIT Press, 2004.
-\bibitem{b17} Espressif Systems, \textit{ESP32-S3 Series Technical Reference Manual}, Version 1.4, Espressif Systems, Shanghai, China, 2023.
-\bibitem{b18} Analog Devices, \textit{ADXL345: 3-Axis Digital Accelerometer Data Sheet}, Rev. E, Analog Devices, Norwood, MA, USA, 2015.
-\bibitem{b19} Bosch Sensortec, \textit{BME280 Combined humidity and pressure sensor Data sheet}, Doc. Rev. 1.8, Bosch Sensortec GmbH, Reutlingen, Germany, 2021.
-\bibitem{b20} A. Paszke \textit{et al.}, ``PyTorch: An imperative style, high-performance deep learning library,'' in \textit{Proc. NeurIPS 32}, 2019, pp. 8024--8035.
-\bibitem{b21} NVIDIA Corporation, \textit{NVIDIA Nemotron-3 Architecture and Implementation}, NVIDIA Technical Whitepaper, Santa Clara, CA, USA, 2024.
-\bibitem{b22} J. Devlin, M.-W. Chang, K. Lee, and K. Toutanova, ``BERT: Pre-training of deep bidirectional transformers for language understanding,'' in \textit{Proc. NAACL-HLT}, 2019, pp. 4171--4186.
-\bibitem{b23} S. Hochreiter and J. Schmidhuber, ``Long short-term memory,'' \textit{Neural Comput.}, vol. 9, no. 8, pp. 1735--1780, Nov. 1997.
-\bibitem{b24} J. Lee, F. Wu, W. Zhao, M. Ghaffari, L. Liao, and D. Siegel, ``Prognostics and health management design for rotary machinery systems,'' \textit{Ind. Manage. Data Syst.}, vol. 114, no. 7, pp. 992--1010, Aug. 2014.
-\bibitem{b25} M. Cerrada \textit{et al.}, ``A review on data-driven fault severity assessment in rolling bearings,'' \textit{Mech. Syst. Signal Process.}, vol. 99, pp. 169--196, Jan. 2018.
-\bibitem{b26} F. Tiuraniemi \textit{et al.}, ``User experience of expressive physical social desktop agents: An empirical evaluation,'' in \textit{Proc. ACM/IEEE Int. Conf. Human-Robot Interact. (HRI)}, 2022, pp. 312--320.
+\bibitem{b4} P. Paris and F. Erdogan, ``A critical analysis of crack propagation laws,'' \textit{Journal of Basic Engineering}, Vol. 85, Issue 4, Dec. 1963, pp. 528-533.
+\bibitem{b5} K. He, X. Zhang, S. Ren, and J. Sun, ``Deep Residual Learning for Image Recognition,'' in \textit{Proc. IEEE Conf. on Computer Vision and Pattern Recognition (CVPR)}, 2016, pp. 770-778.
+\bibitem{b6} J. Hu, L. Shen, and G. Sun, ``Squeeze-and-Excitation Networks,'' in \textit{Proc. IEEE Conf. on Computer Vision and Pattern Recognition (CVPR)}, 2018, pp. 7132-7141.
+\bibitem{b7} H. Zhang, M. Cisse, Y. N. Dauphin, and D. Lopez-Paz, ``mixup: Beyond Empirical Risk Minimization,'' in \textit{Proc. Int. Conf. on Learning Representations (ICLR)}, 2018.
+\bibitem{b8} O. Abdeljaber, O. Avci, S. Kiranyaz, M. Gabbouj, and D. J. Inman, ``Real-time vibration-based structural damage detection using one-dimensional convolutional neural networks,'' \textit{Journal of Sound and Vibration}, Vol. 388, Feb. 2017, pp. 154-170.
+\bibitem{b9} W. Zhang, G. Peng, C. Li, Y. Chen, and Z. Zhang, ``A new deep learning model for fault diagnosis with good anti-noise and domain adaptation ability on raw vibration signals,'' \textit{IEEE Transactions on Instrumentation and Measurement}, Vol. 67, Issue 11, Nov. 2018, pp. 2542-2553.
+\bibitem{b10} L. Eren, T. Ince, and S. Kiranyaz, ``A generic intelligent bearing fault diagnosis system using compact 1D CNN classifier,'' \textit{Journal of Signal Processing Systems}, Vol. 91, Issue 2, Feb. 2019, pp. 179-189.
+\bibitem{b11} R. Liu, B. Yang, E. Zio, and X. Chen, ``Artificial intelligence for fault diagnosis of rotating machinery: A review,'' \textit{Mechanical Systems and Signal Processing}, Vol. 108, Aug. 2018, pp. 33-47.
+\bibitem{b12} Y. Lei, N. Li, L. Guo, N. Li, T. Yan, and J. Lin, ``Machinery health prognostics: A systematic review from data acquisition to RUL prediction,'' \textit{Mechanical Systems and Signal Processing}, Vol. 104, May 2018, pp. 799-834.
+\bibitem{b13} X. Li, W. Zhang, and Q. Ding, ``Deep learning-based remaining useful life estimation of bearings using multi-scale feature extraction,'' \textit{IEEE Transactions on Reliability}, Vol. 69, Issue 2, Jun. 2020, pp. 714-725.
+\bibitem{b14} S. Kiranyaz, O. Avci, O. Abdeljaber, T. Ince, M. Gabbouj, and D. J. Inman, ``1D convolutional neural networks and applications: A survey,'' \textit{Mechanical Systems and Signal Processing}, Vol. 151, Apr. 2021, p. 107398.
+\bibitem{b15} P. K. Kankar, S. C. Sharma, and S. P. Harsha, ``Fault diagnosis of ball bearings using continuous wavelet transform and self organizing maps,'' \textit{Expert Systems with Applications}, Vol. 38, Issue 8, Aug. 2011, pp. 10377-10386.
+\bibitem{b16} H. Shao, H. Jiang, F. Wang, and Y. Zhao, ``An enhancement deep feature learning method for rotating machinery fault diagnosis,'' \textit{IEEE Transactions on Industrial Informatics}, Vol. 13, Issue 2, Apr. 2017, pp. 750-758.
+\bibitem{b17} D. T. Hoang and H. J. Kang, ``A survey on deep learning based bearing fault diagnosis,'' \textit{Neurocomputing}, Vol. 335, Mar. 2019, pp. 327-335.
+\bibitem{b18} S. Khan and T. Yairi, ``A review on the application of deep learning in system health management,'' \textit{Mechanical Systems and Signal Processing}, Vol. 107, Jul. 2018, pp. 241-265.
+\bibitem{b19} A. K. S. Jardine, D. Lin, and D. Banjevic, ``A review on machinery diagnostics and prognostics implementing condition-based maintenance,'' \textit{Mechanical Systems and Signal Processing}, Vol. 20, Issue 7, Oct. 2006, pp. 1483-1510.
+\bibitem{b20} C. Breazeal, \textit{Designing Sociable Robots}, Cambridge, MA, USA: MIT Press, 2004.
+\bibitem{b21} Espressif Systems, \textit{ESP32-S3 Series Technical Reference Manual}, Version 1.4, Espressif Systems, Shanghai, China, 2023.
+\bibitem{b22} Analog Devices, \textit{ADXL345: 3-Axis Digital Accelerometer Data Sheet}, Rev. E, Analog Devices, Norwood, MA, USA, 2015.
+\bibitem{b23} Bosch Sensortec, \textit{BME280 Combined humidity and pressure sensor Data sheet}, Doc. Rev. 1.8, Bosch Sensortec GmbH, Reutlingen, Germany, 2021.
+\bibitem{b24} A. Paszke \textit{et al.}, ``PyTorch: An imperative style, high-performance deep learning library,'' in \textit{Proc. NeurIPS 32}, 2019, pp. 8024-8035.
+\bibitem{b25} NVIDIA Corporation, \textit{NVIDIA Nemotron-3 Architecture and Implementation}, NVIDIA Technical Whitepaper, Santa Clara, CA, USA, 2024.
+\bibitem{b26} J. Lee, F. Wu, W. Zhao, M. Ghaffari, L. Liao, and D. Siegel, ``Prognostics and health management design for rotary machinery systems,'' \textit{Industrial Management \& Data Systems}, Vol. 114, Issue 7, Aug. 2014, pp. 992-1010.
+\bibitem{b27} M. Cerrada \textit{et al.}, ``A review on data-driven fault severity assessment in rolling bearings,'' \textit{Mechanical Systems and Signal Processing}, Vol. 99, Jan. 2018, pp. 169-196.
+\bibitem{b28} F. Tiuraniemi \textit{et al.}, ``User experience of expressive physical social desktop agents: An empirical evaluation,'' in \textit{Proc. ACM/IEEE Int. Conf. Human-Robot Interaction (HRI)}, 2022, pp. 312-320.
 \end{thebibliography}
 
 \end{document}

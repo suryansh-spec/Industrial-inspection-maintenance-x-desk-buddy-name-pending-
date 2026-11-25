@@ -120,7 +120,7 @@
 #define PIN_BTN_DOWN      18
 #define PIN_BTN_SELECT    4
 
-#define PIN_SPEAKER       21
+#define PIN_SPEAKER       -1  // Disabled: GPIO 21 is used by the NeoPixel LED ring
 #define PIN_BATTERY       1
 
 // MAX98357A I2S voice output (optional; the base build still uses the PWM
@@ -749,13 +749,15 @@ void triggerWake(unsigned long durationMs) {
 }
 
 void beep(int frequency, int durationMs) {
-  tone(PIN_SPEAKER, frequency, durationMs);
+  if (PIN_SPEAKER >= 0) tone(PIN_SPEAKER, frequency, durationMs);
 }
 
 void doubleBeep() {
-  tone(PIN_SPEAKER, 1500, 70);
-  delay(90);
-  tone(PIN_SPEAKER, 1900, 90);
+  if (PIN_SPEAKER >= 0) {
+    tone(PIN_SPEAKER, 1500, 70);
+    delay(90);
+    tone(PIN_SPEAKER, 1900, 90);
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -880,19 +882,26 @@ void readMicrophone() {
   size_t samples = bytes / sizeof(int32_t);
   if (samples == 0) return;
 
+  // Remove DC offset before RMS so INMP441 bias doesn't skew readings.
+  int64_t dcSum = 0;
+  for (size_t i = 0; i < samples; i++) {
+    dcSum += (int64_t)micBuffer[i];
+  }
+  double mean = (double)dcSum / (double)samples;
+
   double sum = 0.0;
   for (size_t i = 0; i < samples; i++) {
-    float sample = (float)micBuffer[i];
+    double sample = (double)micBuffer[i] - mean;
     sum += sample * sample;
   }
 
   float rms = sqrt((float)(sum / samples));
   if (rms < 1.0f) rms = 1.0f;
 
-  // INMP441 data is a 24-bit sample left-justified in a 32-bit slot. Treat the
-  // 32-bit word as full scale and map -70..-15 dBFS to a 0..100 level.
+  // INMP441 data is a 24-bit sample left-justified in a 32-bit slot.
+  // Map -82..-22 dBFS to 0..100 so room speech and desk speakers register cleanly.
   float dbfs = 20.0f * log10f(rms / 2147483648.0f);
-  float level = (dbfs + 70.0f) * (100.0f / 55.0f);
+  float level = (dbfs + 82.0f) * (100.0f / 60.0f);
   level = constrain(level, 0.0f, 100.0f);
 
   if (level > micLevelSmoothed) {
@@ -903,7 +912,9 @@ void readMicrophone() {
   sensors.micLevel = (int)(micLevelSmoothed + 0.5f);
 
   // Update FFT visualizer data (cheap enough at 20 ms cadence).
-  computeFftFromMic();
+  if (samples >= FFT_N) {
+    computeFftFromMic();
+  }
 }
 
 void computeFftFromMic() {
@@ -911,9 +922,9 @@ void computeFftFromMic() {
   if (sensors.micOk == false) return;
 
   // Collect N samples from micBuffer (already filled by readMicrophone).
-  long sum = 0;
-  for (int i = 0; i < N; i++) sum += (long)micBuffer[i];
-  float mean = (float)sum / (float)N;
+  int64_t sum = 0;
+  for (int i = 0; i < N; i++) sum += (int64_t)micBuffer[i];
+  float mean = (float)((double)sum / (double)N);
 
   // Hann window + real input
   for (int i = 0; i < N; i++) {
@@ -1196,6 +1207,7 @@ void handleButton(int index) {
       currentExpr = EXPR_CURIOUS;
       beep(1400, 55);
       sendButton("voice");
+      voiceToggle();
       break;
 
     case BA_NONE:
@@ -1299,11 +1311,14 @@ void readSerial() {
   while (Serial.available() > 0) {
     char c = (char)Serial.read();
     if (c == '\n') {
-      if (serialBuffer.length() > 0) {
+      if (serialBufferOverflow) {
+        serialBufferOverflow = false;
+        serialBuffer = "";
+      } else if (serialBuffer.length() > 0) {
         handleBackendLine(serialBuffer);
         serialBuffer = "";
       }
-    } else if (c != '\r') {
+    } else if (c != '\r' && !serialBufferOverflow) {
       // The state packet grew with lyrics and telemetry. Allow room for
       // JSON-escaped non-ASCII text (Python escapes each character as \uXXXX)
       // and base64 cover art payloads.
@@ -1311,6 +1326,7 @@ void readSerial() {
         serialBuffer += c;
       } else {
         serialBuffer = "";
+        serialBufferOverflow = true;
       }
     }
   }
@@ -1460,7 +1476,7 @@ void handleBackendLine(const String& line) {
     if (wallpaperBuf) {
       int seq = payload["seq"] | 0;
       const char* b64 = payload["data"] | "";
-      if (seq >= 0 && b64[0] != '\0') {
+      if (seq >= 0 && seq <= (TFT_W * TFT_H * 2) / WALLPAPER_CHUNK && b64[0] != '\0') {
         long off = (long)seq * WALLPAPER_CHUNK;
         long room = (long)(TFT_W * TFT_H * 2) - off;
         int maxOut = (int)(room > WALLPAPER_CHUNK ? WALLPAPER_CHUNK : room);
@@ -1507,6 +1523,8 @@ void handleBackendLine(const String& line) {
   } else if (strcmp(cmd, "led") == 0) {
     ledApplyCommand(payload);
     tftDirty = true;
+  } else if (strcmp(cmd, "led_audio") == 0) {
+    ledApplyAudio(payload);
   } else if (strcmp(cmd, "set_fonts") == 0) {
     const char* v;
     v = payload["title"] | ""; if (v[0]) { uiMusicTitleFont = fontModeFromName(v); uiMusicTitleAA = fontAAFromMode(uiMusicTitleFont); }
@@ -1819,7 +1837,9 @@ void addNotification(const char* title, const char* message, int priority, const
   noteCount++;
 
   state.unread = unreadLocal();
-  pageBeforeNotice = page;
+  if (!noticeOverride) {
+    pageBeforeNotice = page;
+  }
   noticeOverride = true;
   noticeUntil = millis() + NOTICE_HOLD_MS;
   page = PAGE_NOTIFICATIONS;
@@ -1889,7 +1909,14 @@ void togglePomodoro() {
     pausePomodoro();
     sendPomodoroAction("pause");
   } else {
-    startPomodoro(25);
+    if (pomodoro.remaining > 0 && (pomodoro.remaining < POMODORO_WORK_SECONDS || pomodoro.isBreak)) {
+      pomodoro.running = true;
+      pomodoro.lastTick = millis();
+      tftDirty = true;
+      beep(1500, 70);
+    } else {
+      startPomodoro(25);
+    }
     sendPomodoroAction("start");
   }
 }
@@ -3023,23 +3050,28 @@ void voiceSendToBackend() {
   }
   voiceReplyLen = 0;
 
-  if (contentLength > 44) {
-    voiceReplyWav = (uint8_t*)ps_malloc((size_t)contentLength);
+  if (contentLength > 44 || contentLength < 0) {
+    size_t cap = (contentLength > 44) ? (size_t)contentLength : (512U * 1024U);
+    voiceReplyWav = (uint8_t*)ps_malloc(cap);
     if (voiceReplyWav) {
       WiFiClient* stream = http.getStreamPtr();
       size_t read = 0;
       unsigned long lastData = millis();
-      while (read < (size_t)contentLength && (millis() - lastData) < 20000UL) {
+      while ((contentLength < 0 || read < (size_t)contentLength) &&
+             read < cap &&
+             (millis() - lastData) < 20000UL) {
         size_t available = (size_t)stream->available();
         if (available > 0) {
           size_t want = available;
-          if (want > (size_t)contentLength - read) want = (size_t)contentLength - read;
+          if (want > cap - read) want = cap - read;
           size_t got = stream->readBytes((char*)(voiceReplyWav + read), want);
           if (got > 0) {
             read += got;
             lastData = millis();
           }
         } else {
+          if (contentLength < 0 && !http.connected()) break;
+          readSerial();
           delay(5);
         }
       }

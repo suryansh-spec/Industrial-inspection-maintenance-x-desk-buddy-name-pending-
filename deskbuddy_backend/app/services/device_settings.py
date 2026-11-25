@@ -26,7 +26,7 @@ _WALLPAPER_RAW = _DATA_DIR / "wallpaper.bin"
 # Keep these lists in the exact order the sketch expects: the numeric button
 # map is transmitted as a flat array of indices into BUTTON_ACTIONS.
 BUTTONS = ["mode", "voice", "up", "down", "select"]
-PAGES = ["home", "music", "lyrics", "pc", "env", "notifications", "pomodoro"]
+PAGES = ["home", "music", "lyrics", "pc", "env", "notifications", "pomodoro", "font_test"]
 BUTTON_ACTIONS = [
     "next_page",     # 0
     "prev_page",     # 1
@@ -110,7 +110,41 @@ DEFAULTS: Dict[str, Any] = {
         "sleep_seconds": 120,
         "deep_sleep_seconds": 300,
     },
+    "led": {
+        "power": True,
+        "brightness": 140,
+        "count": 16,
+        "effect": "auto",
+        "mode": "auto",
+        "color": "#7828C8",
+        "color2": "#00C8DC",
+        "speed": 128,
+        "intensity": 128,
+    },
 }
+
+LED_EFFECTS = [
+    {"id": "auto",          "name": "Auto (Reactive + Idle)", "category": "reactive"},
+    {"id": "freq_pulse",    "name": "Freq Pulse (Spectrum)",  "category": "reactive"},
+    {"id": "vu",            "name": "Audio VU Meter",         "category": "reactive"},
+    {"id": "juggle_beat",   "name": "Juggle Beat",            "category": "reactive"},
+    {"id": "beat",          "name": "Beat Pulse",             "category": "reactive"},
+    {"id": "rainbow",       "name": "WLED Rainbow",           "category": "wled"},
+    {"id": "rainbow_cycle", "name": "WLED Rainbow Cycle",     "category": "wled"},
+    {"id": "pride",         "name": "WLED Pride 2015",        "category": "wled"},
+    {"id": "aurora",        "name": "WLED Aurora",            "category": "wled"},
+    {"id": "palette_wave",  "name": "WLED Colorwaves",        "category": "wled"},
+    {"id": "fire",          "name": "WLED Fire 2012",         "category": "wled"},
+    {"id": "comet",         "name": "WLED Comet / Meteor",    "category": "wled"},
+    {"id": "scanner",       "name": "WLED Scanner",           "category": "wled"},
+    {"id": "chase",         "name": "WLED Theater Chase",     "category": "wled"},
+    {"id": "ripple",        "name": "WLED Ripple",            "category": "wled"},
+    {"id": "twinkle",       "name": "WLED Twinkle",           "category": "wled"},
+    {"id": "sparkle",       "name": "WLED Sparkle",           "category": "wled"},
+    {"id": "breathing",     "name": "WLED Breathe",           "category": "wled"},
+    {"id": "blink",         "name": "WLED Blink",             "category": "wled"},
+    {"id": "solid",         "name": "Solid Color",            "category": "basic"},
+]
 
 
 def _merge(base: Any, override: Any) -> Any:
@@ -232,7 +266,9 @@ def process_wallpaper(image_bytes: bytes) -> bytes:
     _DATA_DIR.mkdir(parents=True, exist_ok=True)
     img = Image.open(BytesIO(image_bytes)).convert("RGB")
     img = ImageOps.fit(img, (WALLPAPER_W, WALLPAPER_H), Image.LANCZOS)
-    img.save(_WALLPAPER_PNG, format="PNG")
+    png_tmp = _WALLPAPER_PNG.with_suffix(".png.tmp")
+    img.save(png_tmp, format="PNG")
+    png_tmp.replace(_WALLPAPER_PNG)
 
     raw = bytearray(WALLPAPER_W * WALLPAPER_H * 2)
     i = 0
@@ -241,8 +277,11 @@ def process_wallpaper(image_bytes: bytes) -> bytes:
         raw[i] = v & 0xFF        # little-endian, matches the device buffer
         raw[i + 1] = (v >> 8) & 0xFF
         i += 2
-    _WALLPAPER_RAW.write_bytes(bytes(raw))
-    return bytes(raw)
+    raw_bytes = bytes(raw)
+    raw_tmp = _WALLPAPER_RAW.with_suffix(".bin.tmp")
+    raw_tmp.write_bytes(raw_bytes)
+    raw_tmp.replace(_WALLPAPER_RAW)
+    return raw_bytes
 
 
 def clear_wallpaper() -> None:
@@ -299,6 +338,14 @@ async def push_display(manager) -> None:
         await manager.send_command("set_fonts", mf)
 
 
+async def push_led(manager) -> None:
+    if not manager or not manager.is_connected:
+        return
+    led = store.get("led") or {}
+    if isinstance(led, dict) and led:
+        await manager.send_command("led", led)
+
+
 async def push_all(manager) -> None:
     """Re-apply every device-owned setting (called after (re)connecting)."""
     if not manager or not manager.is_connected:
@@ -307,6 +354,7 @@ async def push_all(manager) -> None:
         await manager.send_command("set_theme", store.get("device_theme"))
         await manager.send_command("set_buttons", {"map": store.flat_button_map()})
         await push_display(manager)
+        await push_led(manager)
         await push_wallpaper(manager)
         # Force cover art re-sync on reconnect (cover art is lost on device reboot)
         try:

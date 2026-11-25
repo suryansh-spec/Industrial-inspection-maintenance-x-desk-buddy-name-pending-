@@ -14,7 +14,8 @@ from alembic import context
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.core.config import settings
-from app.core.database import Base
+from app.core.database import Base, _prepare_database_url
+import app.models  # noqa: F401 - ensure all SQLAlchemy models are registered
 
 # this is the Alembic Config object
 config = context.config
@@ -23,8 +24,9 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Set the database URL
-config.set_main_option("sqlalchemy.url", settings.database_url)
+# Set the database URL (normalized for asyncpg)
+_db_url, _ = _prepare_database_url(settings.database_url)
+config.set_main_option("sqlalchemy.url", _db_url)
 
 # Target metadata
 target_metadata = Base.metadata

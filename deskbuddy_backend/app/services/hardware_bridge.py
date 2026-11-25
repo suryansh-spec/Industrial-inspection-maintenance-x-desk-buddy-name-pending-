@@ -91,57 +91,76 @@ class HardwareBridge:
         self._command_queue: asyncio.Queue = asyncio.Queue()
         self._response_futures: Dict[str, asyncio.Future] = {}
         self._command_id = 0
-        
+        self._write_lock = asyncio.Lock()
+        self._rx_buf = bytearray()
+        self._inbound_queue: asyncio.Queue[str] = asyncio.Queue(maxsize=256)
+        self._manual_disconnect = False
+
         # Buffer for incomplete lines
         self._buffer = ""
-    
+
     async def connect(self, port: Optional[str] = None) -> bool:
         """Connect to the device."""
         if self.state == ConnectionState.CONNECTED:
             logger.warning("Already connected")
             return True
-        
+
+        self._manual_disconnect = False
         self.state = ConnectionState.CONNECTING
         target_port = port or self._find_device_port()
-        
+
         if not target_port:
             logger.error("No device port found")
             self.state = ConnectionState.ERROR
             return False
-        
+
         try:
-            self._serial = serial.Serial(
-                port=target_port,
-                baudrate=115200,
-                timeout=1.0,
-                write_timeout=1.0
-            )
-            
+            def _open_port():
+                ser = serial.Serial(
+                    port=target_port,
+                    baudrate=115200,
+                    timeout=1.0,
+                    write_timeout=1.0,
+                )
+                return ser
+
+            self._serial = await asyncio.to_thread(_open_port)
+
             # Wait for device to settle
             await asyncio.sleep(2)
-            
+
             # Clear buffers
-            self._serial.reset_input_buffer()
-            self._serial.reset_output_buffer()
-            
+            await asyncio.to_thread(self._serial.reset_input_buffer)
+            await asyncio.to_thread(self._serial.reset_output_buffer)
+
             self.port = target_port
             self.state = ConnectionState.CONNECTED
             self._running = True
-            
+            self._rx_buf.clear()
+
+            from app.services import serial_manager as serial_state
+            serial_state.set_serial_manager(self)
+
             # Start read task
             self._read_task = asyncio.create_task(self._read_loop())
-            
+
             # Wait for device ready
             await asyncio.sleep(1)
-            
+
             # Request device info
             await self._request_device_info()
-            
+
             logger.info(f"Connected to device on {target_port}")
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to connect: {e}")
+            if self._serial and self._serial.is_open:
+                try:
+                    self._serial.close()
+                except Exception:
+                    pass
+            self._serial = None
             self.state = ConnectionState.ERROR
             return False
     
@@ -156,91 +175,176 @@ class HardwareBridge:
                 return port.device
         return None
     
-    async def disconnect(self):
+    async def disconnect(self, manual: bool = False):
         """Disconnect from device."""
+        if manual:
+            self._manual_disconnect = True
         self._running = False
-        
+
         if self._read_task:
             self._read_task.cancel()
             try:
                 await self._read_task
             except asyncio.CancelledError:
                 pass
-        
+            self._read_task = None
+
         if self._serial and self._serial.is_open:
-            self._serial.close()
-        
+            try:
+                await asyncio.to_thread(self._serial.close)
+            except Exception:
+                pass
+        self._serial = None
+
+        from app.services import serial_manager as serial_state
+        if serial_state.get_serial_manager() is self:
+            serial_state.set_serial_manager(None)
+
         self.state = ConnectionState.DISCONNECTED
         logger.info("Disconnected from device")
-    
+
+    def _read_available_sync(self) -> bytes:
+        """Read currently buffered bytes from serial without blocking on incomplete lines."""
+        if not self._serial or not self._serial.is_open:
+            return b""
+        waiting = self._serial.in_waiting
+        if waiting > 0:
+            return self._serial.read(waiting)
+        return b""
+
+    async def read_line(self) -> Optional[str]:
+        """Non-blocking pop of the next complete line for external consumers."""
+        try:
+            return self._inbound_queue.get_nowait()
+        except asyncio.QueueEmpty:
+            return None
+
+    def _enqueue_inbound(self, line: str) -> None:
+        if self._inbound_queue.full():
+            try:
+                self._inbound_queue.get_nowait()
+            except asyncio.QueueEmpty:
+                pass
+        try:
+            self._inbound_queue.put_nowait(line)
+        except asyncio.QueueFull:
+            pass
+
     async def _read_loop(self):
         """Continuously read from serial port."""
         while self._running and self._serial and self._serial.is_open:
             try:
-                if self._serial.in_waiting > 0:
-                    line = self._serial.readline().decode('utf-8', errors='ignore').strip()
-                    if line:
-                        await self._process_line(line)
+                chunk = await asyncio.to_thread(self._read_available_sync)
+                if chunk:
+                    self._rx_buf.extend(chunk)
+                    if len(self._rx_buf) > 32768:
+                        self._rx_buf = self._rx_buf[-16384:]
+                    while b"\n" in self._rx_buf:
+                        raw_line, _, rest = self._rx_buf.partition(b"\n")
+                        self._rx_buf = bytearray(rest)
+                        line = raw_line.decode("utf-8", errors="ignore").strip()
+                        if line:
+                            await self._process_line(line)
                 else:
                     await asyncio.sleep(0.01)
+            except serial.SerialException as e:
+                logger.error(f"Serial connection lost: {e}")
+                self._running = False
+                if self._serial and self._serial.is_open:
+                    try:
+                        self._serial.close()
+                    except Exception:
+                        pass
+                self._serial = None
+                from app.services import serial_manager as serial_state
+                if serial_state.get_serial_manager() is self:
+                    serial_state.set_serial_manager(None)
+                self.state = ConnectionState.DISCONNECTED
+                break
             except Exception as e:
                 logger.error(f"Read error: {e}")
                 await asyncio.sleep(0.1)
-    
+
     async def _process_line(self, line: str):
         """Process a line from serial."""
         line = line.strip()
         if not line:
             return
-        
+
         logger.debug(f"RX: {line}")
-        
+
         # Try to parse as JSON
         try:
             data = json.loads(line)
+            self._buffer = ""
+            self._enqueue_inbound(line)
             await self._handle_json_message(data)
             return
         except json.JSONDecodeError:
             pass
-        
+
         # Handle plain text responses
         if line.startswith("OK") or line.startswith("ERROR"):
+            self._enqueue_inbound(line)
             await self._handle_response(line)
-        elif line.startswith("{"):
+        elif line.startswith("{") or self._buffer:
             # Might be incomplete JSON
+            if line.startswith("{") and self._buffer:
+                self._buffer = ""
             self._buffer += line
+            if len(self._buffer) > 16384:
+                self._buffer = ""
+                return
             try:
                 data = json.loads(self._buffer)
+                full_line = self._buffer
                 self._buffer = ""
+                self._enqueue_inbound(full_line)
                 await self._handle_json_message(data)
             except json.JSONDecodeError:
                 pass  # Wait for more data
         else:
-            # Log other messages
+            self._enqueue_inbound(line)
             logger.debug(f"Device: {line}")
-    
+
     async def _handle_json_message(self, data: dict):
         """Handle parsed JSON message from device."""
         msg_type = data.get("type") or data.get("cmd")
-        
+
+        payload_obj = data.get("payload")
+        cmd_id = data.get("cmd_id") or (payload_obj.get("cmd_id") if isinstance(payload_obj, dict) else None)
+        if cmd_id and cmd_id in self._response_futures:
+            fut = self._response_futures[cmd_id]
+            if not fut.done():
+                fut.set_result(data)
+
         if msg_type == "sensor_data":
             await self._handle_sensor_data(data.get("data", {}))
+        elif msg_type == "heartbeat":
+            if data.get("firmware"):
+                self.firmware_version = str(data["firmware"])
+            if data.get("mode"):
+                self.device_mode = str(data["mode"])
         elif msg_type == "mode_switched":
-            await self._handle_mode_change(data.get("payload", ""))
+            mode = data.get("mode") or (payload_obj if isinstance(payload_obj, str) else "")
+            await self._handle_mode_change(mode)
         elif msg_type == "inspection_started":
             logger.info("Inspection started")
-        elif msg_type == "inspection_completed":
-            await self._handle_inspection_result(data.get("payload", {}))
+        elif msg_type in ("inspection_completed", "inspection_data"):
+            await self._handle_inspection_result(data.get("data") or (payload_obj if isinstance(payload_obj, dict) else {}))
         elif msg_type == "pomodoro":
-            await self._handle_pomodoro_update(data.get("payload", ""))
+            action = data.get("action") or (payload_obj if isinstance(payload_obj, str) else "")
+            await self._handle_pomodoro_update(action)
         elif msg_type == "notification":
             await self._handle_notification(data)
-        elif msg_type == "sensor_data":
-            await self._handle_sensor_data(data.get("data", {}))
         elif msg_type == "pong":
             pass  # Heartbeat response
         elif msg_type == "status":
-            logger.info(f"Device status: {data.get('payload', '')}")
+            if data.get("firmware"):
+                self.firmware_version = str(data["firmware"])
+            if data.get("mode"):
+                self.device_mode = str(data["mode"])
+            logger.info(f"Device status: {data.get('payload', data)}")
         else:
             logger.debug(f"Unhandled message type: {msg_type}")
     
@@ -305,11 +409,6 @@ class HardwareBridge:
                 "priority": priority
             })
     
-    async def _handle_response(self, line: str):
-        """Handle simple text response."""
-        # Handle OK/ERROR responses
-        pass
-    
     async def _request_device_info(self):
         """Request device information."""
         await self.send_command("get_sensors", {})
@@ -320,21 +419,31 @@ class HardwareBridge:
     
     async def send_command(self, command: str, payload: Optional[dict] = None) -> bool:
         """Send command to device."""
-        if not self.state == ConnectionState.CONNECTED:
+        if not self.state == ConnectionState.CONNECTED or not self._serial or not self._serial.is_open:
             logger.warning("Not connected to device")
             return False
-        
+
         try:
             message = {"cmd": command}
             if payload:
                 message["payload"] = payload
-            
+
             message_json = json.dumps(message) + "\n"
-            self._serial.write(message_json.encode())
-            self._serial.flush()
-            
+            encoded = message_json.encode()
+
+            def _write_sync():
+                self._serial.write(encoded)
+                self._serial.flush()
+
+            async with self._write_lock:
+                await asyncio.to_thread(_write_sync)
+
             logger.debug(f"TX: {message_json.strip()}")
             return True
+        except serial.SerialException as e:
+            logger.error(f"Send error (serial disconnected): {e}")
+            self.state = ConnectionState.DISCONNECTED
+            return False
         except Exception as e:
             logger.error(f"Send error: {e}")
             return False
@@ -346,10 +455,10 @@ class HardwareBridge:
         self._command_id += 1
         cmd_id = f"cmd_{self._command_id}"
         
-        future = asyncio.Future()
+        future = asyncio.get_running_loop().create_future()
         self._response_futures[cmd_id] = future
         
-        payload = payload or {}
+        payload = dict(payload) if payload else {}
         payload["cmd_id"] = cmd_id
         
         await self.send_command(command, payload)
@@ -364,9 +473,11 @@ class HardwareBridge:
             self._response_futures.pop(cmd_id, None)
     
     async def _handle_response(self, line: str):
-        """Handle command response."""
-        # Parse response and resolve future
-        pass
+        """Handle simple text response."""
+        for cmd_id, fut in list(self._response_futures.items()):
+            if not fut.done():
+                fut.set_result({"ok": line.startswith("OK"), "raw": line})
+                break
     
     # ========================================================================
     # HIGH-LEVEL COMMANDS
@@ -495,8 +606,8 @@ class HardwareBridge:
     def is_connected(self) -> bool:
         return self.state == ConnectionState.CONNECTED
     
-    def get_sensor_data(self) -> Dict[str, Any]:
-        return asdict(self.sensor_data)
+    def get_cached_sensor_data(self) -> Dict[str, Any]:
+        return dict(self.sensor_data)
     
     def get_device_info(self) -> Dict[str, Any]:
         return {

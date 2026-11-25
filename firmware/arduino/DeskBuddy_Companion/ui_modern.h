@@ -886,13 +886,17 @@ void drawMusicPage() {
   if (state.musicTitle[0] == '\0') {
     uiText(64, 70, "Nothing playing", F_BOLD, theme.text, 1);
     uiText(64, 86, "Open YouTube Music", F_REG, theme.secondary, 1);
+    uiFontFaceMode = savedFace;
+    uiFontAA = savedAA;
     uiPageDots();
     return;
   }
 
   if (strcmp(uiLastTitle, state.musicTitle) != 0) {
     strncpy(uiLastTitle, state.musicTitle, sizeof(uiLastTitle) - 1);
-    uiProg = -1;
+    uiLastTitle[sizeof(uiLastTitle) - 1] = 0;
+    uiProg = 0.0f;
+    uiProgressCompleteMs = 0;
   }
 
   uiSmooth(uiPlayT, state.musicPlaying ? 1.0f : 0.0f, 9.0f);
@@ -919,15 +923,23 @@ void drawMusicPage() {
   // Artist marquees like the title.
   uiMarquee(52, 46, 74, state.musicArtist[0] ? state.musicArtist : "Unknown artist", F_REG, theme.secondary, theme.bg, true);
 
-  // Current lyric (same font for all lines).
+  // Current lyric (14px F_BOLD, up to 3 lines; marquee-scroll if still longer).
   if (state.musicPlaying && state.lyricCur[0] != '\0') {
     char ly[3][40];
     uiFontFaceMode = uiMusicActiveLyricFont; uiFontAA = uiMusicActiveLyricAA;
-    int n = uiWrap(state.lyricCur, uiMusicActiveLyricFont, 112, ly, 3);
+    int n = uiWrap(state.lyricCur, F_BOLD, 116, ly, 3);
     uint16_t lcol = state.lyricsAvailable ? uiFade(accent, 0.95f) : uiFade(theme.text, 0.7f);
-    int ly0 = 76;
-    for (int i = 0; i < n; i++) {
-      uiTextFit(8, ly0 + i * 11, ly[i], uiMusicActiveLyricFont, lcol, 112, 0);
+    size_t lastLen = (n > 0) ? strlen(ly[n - 1]) : 0;
+    size_t curLen = strlen(state.lyricCur);
+    bool truncated = (lastLen >= 2 && strcmp(ly[n - 1] + lastLen - 2, "..") == 0) &&
+                     !(curLen >= 2 && strcmp(state.lyricCur + curLen - 2, "..") == 0);
+    if (truncated) {
+      uiMarquee(6, 90, 116, state.lyricCur, F_BOLD, lcol, theme.bg, false);
+    } else {
+      int ly0 = (n == 1) ? 90 : (n == 2 ? 82 : 76);
+      for (int i = 0; i < n; i++) {
+        uiTextFit(6, ly0 + i * 15, ly[i], F_BOLD, lcol, 116, 0);
+      }
     }
   }
 
@@ -942,13 +954,6 @@ void drawMusicPage() {
     target = 0.0f;
   }
   if (uiProg < 0) uiProg = 0.0f;
-  // Reset on new track.
-  if (strcmp(uiLastTitle, state.musicTitle) != 0) {
-    strncpy(uiLastTitle, state.musicTitle, sizeof(uiLastTitle) - 1);
-    uiLastTitle[sizeof(uiLastTitle) - 1] = 0;
-    uiProg = 0.0f;
-    uiProgressCompleteMs = 0;
-  }
   uiSmooth(uiProg, target, 6.0f);
   if (uiProg > 0.999f) {
     uiProg = 1.0f;
@@ -1121,11 +1126,6 @@ void drawMusicPage() {
 
   // Completion hold: if complete, full perimeter already drawn (progDist=perim).
 
-  char a[12], b[12]; uiFmtTime(state.musicProgress, a, sizeof(a)); uiFmtTime(state.musicDuration, b, sizeof(b));
-  uiFontFaceMode = uiMusicTimerFont; uiFontAA = true;
-  uiText(8, 106, a, F_REG, theme.secondary, 0);
-  uiText(120, 106, b, F_REG, theme.secondary, 2);
-
   char hint[32];
   snprintf(hint, sizeof(hint), state.musicPlaying ? "Playing" : "Paused");
   uiFontFaceMode = uiMusicStatusFont; uiFontAA = true;
@@ -1145,6 +1145,8 @@ static unsigned long lyChangeMs = 0;
 
 void drawLyricsPage() {
   uint16_t accent = uiCoverAccent ? uiCoverAccent : theme.accent;
+  uint8_t savedFace = uiFontFaceMode;
+  bool savedAA = uiFontAA;
   if (hasLyricsBg && lyricsBg && uiBgBlurred) {
     memcpy(uiFb(), lyricsBg, UI_W * UI_H * sizeof(uint16_t));
   } else {
@@ -1168,12 +1170,12 @@ void drawLyricsPage() {
 
   // Lyrics are the one place where content length is unbounded, so wrap at the
   // panel width using the active lyric face and allow four lines.
-  const int LY_MAXW = 118;
+  const int LY_MAXW = 120;
   if (strcmp(lyKey, state.lyricCur) != 0) {
     strncpy(lyKey, state.lyricCur, sizeof(lyKey) - 1);
     lyKey[sizeof(lyKey) - 1] = 0;
-    uiFontFaceMode = uiMusicUpcomingLyricFont; uiFontAA = uiMusicUpcomingLyricAA;
-    lyN = uiWrap(state.lyricCur[0] ? state.lyricCur : "...", uiMusicUpcomingLyricFont, LY_MAXW, lyLines, 4);
+    uiFontFaceMode = uiMusicActiveLyricFont; uiFontAA = uiMusicActiveLyricAA;
+    lyN = uiWrap(state.lyricCur[0] ? state.lyricCur : "...", F_BOLD, LY_MAXW, lyLines, 4);
     lyChangeMs = uiNowMs;
   }
   float t = uiEaseOut((uiNowMs - lyChangeMs) / 380.0f);
@@ -1184,21 +1186,24 @@ void drawLyricsPage() {
          uiLerp(theme.bg, state.lyricsSynced ? theme.success : theme.warning, 42), 6);
   if (state.lyricTotal > 0 && state.lyricIndex >= 0) {
     char p[16]; snprintf(p, sizeof(p), "%d/%d", state.lyricIndex + 1, state.lyricTotal);
-    uiText(120, 33, p, uiMusicUpcomingLyricFont, theme.secondary, 2);
+    uiText(120, 33, p, F_REG, theme.secondary, 2);
   }
 
   uiFontFaceMode = uiMusicUpcomingLyricFont; uiFontAA = uiMusicUpcomingLyricAA;
-  uiTextFit(64, 51 + slide / 4, state.lyricPrev, uiMusicUpcomingLyricFont, uiFade(theme.text, 0.45f), LY_MAXW, 1);
+  uiTextFit(64, 43 + slide / 4, state.lyricPrev, F_REG, uiFade(theme.text, 0.45f), LY_MAXW, 1);
 
-  const int step = 9;
-  int block = lyN * step, first = 80 - block / 2 + 7 + slide;
+  const int step = 14;
+  int block = lyN * step, first = 82 - block / 2 + 9 + slide;
   uint16_t ac = uiFade(accent, 0.30f + 0.70f * t);
+  uiFontFaceMode = uiMusicActiveLyricFont; uiFontAA = uiMusicActiveLyricAA;
   for (int i = 0; i < lyN; i++)
     if (lyLines[i][0])
-      uiTextFit(64, first + i * step, lyLines[i], uiMusicActiveLyricFont, ac, LY_MAXW, 1);
+      uiTextFit(64, first + i * step, lyLines[i], F_BOLD, ac, LY_MAXW, 1);
 
   uiFontFaceMode = uiMusicUpcomingLyricFont; uiFontAA = uiMusicUpcomingLyricAA;
-  uiTextFit(64, 112 + slide / 3, state.lyricNext, uiMusicUpcomingLyricFont, uiFade(theme.text, 0.45f * t + 0.12f), LY_MAXW, 1);
+  uiTextFit(64, 124 + slide / 3, state.lyricNext, F_REG, uiFade(theme.text, 0.45f * t + 0.12f), LY_MAXW, 1);
+  uiFontFaceMode = savedFace;
+  uiFontAA = savedAA;
   uiPageDots();
 }
 

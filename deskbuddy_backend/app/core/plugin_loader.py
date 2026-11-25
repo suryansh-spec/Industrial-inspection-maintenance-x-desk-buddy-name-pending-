@@ -15,44 +15,63 @@ from .state_manager import StateManager
 logger = logging.getLogger(__name__)
 
 
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
 class PluginLoader:
     """Discovers, loads, and manages plugins."""
 
     def __init__(self, event_bus: EventBus, state_manager: StateManager,
-                 device_manager, config_dir: str = "plugins"):
+                 device_manager, config_dir: Optional[str] = None):
         self.event_bus = event_bus
         self.state_manager = state_manager
         self.device_manager = device_manager
-        self.config_dir = Path(config_dir)
+        self.config_dir = Path(config_dir) if config_dir else _PROJECT_ROOT
         self.plugins: Dict[str, DeskBuddyPlugin] = {}
         self.manifests: Dict[str, PluginManifest] = {}
-        self._plugin_dir = Path("plugins")
+        self._plugin_dir = _PROJECT_ROOT / "plugins"
         self._config_file = self.config_dir / "plugins.json"
 
     async def discover_plugins(self) -> List[str]:
         """Discover plugins from local directory and config."""
-        discovered = []
+        discovered: List[str] = []
+        disabled: set[str] = set()
+        enabled_override: List[str] = []
+
+        if self._config_file.exists():
+            with open(self._config_file, encoding="utf-8") as f:
+                config = json.load(f)
+                disabled = set(config.get("disabled", []))
+                enabled_override = list(config.get("enabled", []))
+
+        def _scan_dir(base_dir: Path) -> None:
+            if not base_dir.exists():
+                return
+            for p in base_dir.iterdir():
+                manifest_path = p / "manifest.json"
+                if not (p.is_dir() and manifest_path.exists()):
+                    continue
+                if p.name in disabled or p.name in discovered:
+                    continue
+                try:
+                    with open(manifest_path, encoding="utf-8") as mf:
+                        manifest_data = json.load(mf)
+                    if not manifest_data.get("enabled_by_default", True) and p.name not in enabled_override:
+                        continue
+                except Exception:
+                    pass
+                discovered.append(p.name)
 
         # 1. Local plugin directory
-        if self._plugin_dir.exists():
-            for p in self._plugin_dir.iterdir():
-                if p.is_dir() and (p / "manifest.json").exists():
-                    discovered.append(p.name)
+        _scan_dir(self._plugin_dir)
 
         # 2. Built-in plugins (app/plugins/)
-        builtin_dir = Path("app/plugins")
-        if builtin_dir.exists():
-            for p in builtin_dir.iterdir():
-                if p.is_dir() and (p / "manifest.json").exists():
-                    discovered.append(p.name)
+        _scan_dir(_PROJECT_ROOT / "app" / "plugins")
 
         # 3. Config file overrides
-        if self._config_file.exists():
-            with open(self._config_file) as f:
-                config = json.load(f)
-                for plugin_id in config.get("enabled", []):
-                    if plugin_id not in discovered:
-                        discovered.append(plugin_id)
+        for plugin_id in enabled_override:
+            if plugin_id not in disabled and plugin_id not in discovered:
+                discovered.append(plugin_id)
 
         return discovered
 

@@ -47,7 +47,7 @@ _panel_theme: Dict[str, Any] = {
 
 _settings: Dict[str, Any] = {
     "serial_port": "COM6",
-    "baud_rate": 112000,
+    "baud_rate": 115200,
     "pc_metrics_interval_ms": 1000,
     "sensor_data_interval_ms": 2000,
     "state_push_interval_ms": 500,
@@ -369,6 +369,37 @@ async def test_notification_rule(rule_id: str):
             await rule_engine.fire(rule, value)
             return {"status": "fired", "rule": rule, "value": value}
     raise HTTPException(status_code=404, detail="Rule not found")
+
+
+# ---------------------------------------------------------------------------
+# LED Ring (WLED-inspired effects)
+# ---------------------------------------------------------------------------
+@router.get("/led")
+async def get_led_settings():
+    return {
+        "led": store.get("led"),
+        "effects": ds.LED_EFFECTS,
+        "modes": ["auto", "music", "ambient"],
+    }
+
+
+@router.put("/led")
+async def update_led_settings(body: Dict[str, Any]):
+    current = store.get("led") or {}
+    allowed = {"power", "brightness", "count", "effect", "mode", "color", "color2", "speed", "intensity"}
+    patch = {k: v for k, v in body.items() if k in allowed}
+    merged = {**current, **patch}
+    for num_key, lo, hi in (("brightness", 0, 255), ("speed", 0, 255), ("intensity", 0, 255), ("count", 1, 120)):
+        if num_key in merged:
+            try:
+                merged[num_key] = max(lo, min(hi, int(merged[num_key])))
+            except (TypeError, ValueError):
+                pass
+    if "power" in merged:
+        merged["power"] = bool(merged["power"])
+    saved = store.replace("led", merged)
+    await _push("led", saved)
+    return {"status": "saved", "led": saved}
 
 
 # ---------------------------------------------------------------------------

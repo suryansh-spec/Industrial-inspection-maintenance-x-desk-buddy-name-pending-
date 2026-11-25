@@ -122,6 +122,10 @@ class DeskMateService:
         return self.get_pomodoro_status()
 
     def pause_pomodoro(self) -> Dict[str, Any]:
+        if self.pomodoro_running and self.pomodoro_started_at is not None:
+            elapsed = time.monotonic() - self.pomodoro_started_at
+            self.pomodoro_duration_seconds = max(0, int(self.pomodoro_duration_seconds - elapsed))
+        self.pomodoro_started_at = None
         self.pomodoro_running = False
         return self.get_pomodoro_status()
 

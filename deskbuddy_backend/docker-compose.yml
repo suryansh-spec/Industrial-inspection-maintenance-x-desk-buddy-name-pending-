@@ -9,9 +9,9 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - DATABASE_URL=postgresql://postgres:[YOUR-DATABASE-PASSWORD]@db.fibjpcssiyqxcihoprkf.supabase.co:5432/postgres
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/deskbuddy
       - REDIS_URL=redis://redis:6379/0
-      - BACKEND_URL=http://backend:8000
+      - BACKEND_URL=http://backend:8080
       - SERIAL_PORT=/dev/ttyUSB0
       - NVIDIA_API_KEY=${NVIDIA_API_KEY}
       - GOOGLE_CREDENTIALS_PATH=/app/credentials/google-calendar.json
@@ -38,9 +38,9 @@ services:
       context: ./desktop_bridge
       dockerfile: Dockerfile
     ports:
-      - "8080:8080"
+      - "8081:8080"
     environment:
-      - BACKEND_URL=http://backend:8000
+      - BACKEND_URL=http://backend:8080
       - SERIAL_PORT=/dev/ttyUSB0
       - NVIDIA_API_KEY=${NVIDIA_API_KEY}
     devices:

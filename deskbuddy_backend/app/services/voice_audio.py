@@ -120,7 +120,16 @@ def _sapi_tts_wav(text: str, sample_rate: int = TARGET_SAMPLE_RATE) -> Optional[
         return None
 
     tmp_path: Optional[str] = None
+    stream = None
+    com_inited = False
     try:
+        try:
+            import pythoncom  # type: ignore
+            pythoncom.CoInitialize()
+            com_inited = True
+        except Exception:
+            pass
+
         fd, tmp_path = tempfile.mkstemp(suffix=".wav")
         os.close(fd)
 
@@ -140,6 +149,7 @@ def _sapi_tts_wav(text: str, sample_rate: int = TARGET_SAMPLE_RATE) -> Optional[
         voice.AudioOutputStream = stream
         voice.Speak(text)
         stream.Close()
+        stream = None
 
         with open(tmp_path, "rb") as fh:
             return fh.read()
@@ -147,6 +157,17 @@ def _sapi_tts_wav(text: str, sample_rate: int = TARGET_SAMPLE_RATE) -> Optional[
         logger.debug("SAPI TTS failed: %s", exc)
         return None
     finally:
+        if stream is not None:
+            try:
+                stream.Close()
+            except Exception:
+                pass
+        if com_inited:
+            try:
+                import pythoncom  # type: ignore
+                pythoncom.CoUninitialize()
+            except Exception:
+                pass
         if tmp_path:
             try:
                 os.unlink(tmp_path)
@@ -179,15 +200,15 @@ async def tts_to_pcm16(
             if chunk.get("type") == "audio":
                 mp3.extend(chunk["data"])
         if mp3:
-            return decode_audio_to_pcm16(bytes(mp3), TARGET_SAMPLE_RATE)
+            return await asyncio.to_thread(decode_audio_to_pcm16, bytes(mp3), TARGET_SAMPLE_RATE)
     except Exception as exc:
         logger.warning("edge-tts failed (%s); falling back to SAPI", exc)
 
     # 2. Windows SAPI offline fallback.
-    wav = _sapi_tts_wav(text, TARGET_SAMPLE_RATE)
+    wav = await asyncio.to_thread(_sapi_tts_wav, text, TARGET_SAMPLE_RATE)
     if wav:
         try:
-            return decode_audio_to_pcm16(wav, TARGET_SAMPLE_RATE)
+            return await asyncio.to_thread(decode_audio_to_pcm16, wav, TARGET_SAMPLE_RATE)
         except Exception as exc:  # pragma: no cover - Windows COM dependent
             logger.warning("SAPI WAV decode failed: %s", exc)
 

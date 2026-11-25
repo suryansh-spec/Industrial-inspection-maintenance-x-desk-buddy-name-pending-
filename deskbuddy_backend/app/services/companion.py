@@ -125,8 +125,9 @@ class CompanionService:
                 async def _fetch() -> None:
                     try:
                         track = await lyrics_service.load(title, artist, duration_ms)
-                        self._lyrics_track = track
-                        self._lyrics_window = lyrics_window(track, progress_ms)
+                        if self._lyrics_track_key == key:
+                            self._lyrics_track = track
+                            self._lyrics_window = lyrics_window(track, progress_ms)
                     except Exception:
                         pass
 

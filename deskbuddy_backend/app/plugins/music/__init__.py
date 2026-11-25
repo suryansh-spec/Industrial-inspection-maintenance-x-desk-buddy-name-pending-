@@ -26,19 +26,20 @@ class Plugin(DeskBuddyPlugin):
         self._lyrics_track = None
 
     async def on_load(self):
-        from app.services.music import MusicController
-        from app.services.cover_art import CoverArtService
-        self.music_controller = MusicController()
-        self.cover_art_service = CoverArtService()
+        from app.services.music import music_controller
+        from app.services.cover_art import cover_art_service
+        self.music_controller = music_controller
+        self.cover_art_service = cover_art_service
         self.ctx.logger.info("Music plugin loading")
 
     async def on_start(self):
-        await self.music_controller.initialize()
+        if not getattr(self.music_controller, "_initialized", False):
+            await self.music_controller.initialize()
         self.ctx.logger.info("Music plugin started")
 
     async def on_stop(self):
         await self._cancel_tasks()
-        await self.music_controller.close()
+        await self.music_controller.cleanup()
         await self.cover_art_service.close()
         self.ctx.logger.info("Music plugin stopped")
 

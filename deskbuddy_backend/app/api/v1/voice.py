@@ -230,12 +230,16 @@ async def voice_health():
 @router.websocket("/ws")
 async def voice_websocket(websocket: WebSocket):
     """WebSocket for real-time voice interaction (binary WAV in, WAV out)."""
+    import uuid
     await websocket.accept()
-    session_id = "ws"
+    session_id = f"ws_{uuid.uuid4().hex[:12]}"
 
     try:
         while True:
             data = await websocket.receive_bytes()
+            if len(data) > settings.voice_max_upload_bytes:
+                await websocket.send_json({"type": "error", "message": "Audio payload exceeds max upload limit"})
+                continue
             result = await voice_assistant.process_audio(data, session_id=session_id)
             await websocket.send_json(
                 {

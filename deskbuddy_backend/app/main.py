@@ -108,7 +108,7 @@ async def lifespan(app: FastAPI):
             logger.debug("Could not apply sleep thresholds", exc_info=True)
 
     # Initialize plugin system
-    plugin_loader = PluginLoader(event_bus, state_manager, serial_state)
+    plugin_loader = PluginLoader(event_bus, state_manager, hardware_bridge)
     app.state.plugin_loader = plugin_loader
     try:
         await plugin_loader.start_all()
@@ -129,6 +129,11 @@ async def lifespan(app: FastAPI):
         _background_tasks.append(asyncio.create_task(gaming_tick_task()))
         # User-authored notification rules (every 5 seconds)
         _background_tasks.append(asyncio.create_task(notification_rules_task()))
+    if settings.enable_hardware_bridge:
+        from app.services.pc_audio import pc_audio_service
+        pc_audio_service.start()
+        _background_tasks.append(asyncio.create_task(pc_audio_stream_task()))
+        _background_tasks.append(asyncio.create_task(hardware_reconnect_task()))
 
     logger.info("DeskBuddy Backend started successfully")
 
@@ -150,6 +155,8 @@ async def lifespan(app: FastAPI):
                 await manager.disconnect()
 
         with suppress(Exception):
+            await plugin_loader.stop_all()
+        with suppress(Exception):
             await system_monitor.stop()
         with suppress(Exception):
             await music_controller.cleanup()
@@ -158,13 +165,18 @@ async def lifespan(app: FastAPI):
         with suppress(Exception):
             await voice_assistant.cleanup()
         with suppress(Exception):
+            from app.services.pc_audio import pc_audio_service
+            pc_audio_service.stop()
+        with suppress(Exception):
             await hardware_bridge.disconnect()
         with suppress(Exception):
             await companion_service.stop()
         with suppress(Exception):
             from app.services.lyrics import lyrics_service
+            from app.services.cover_art import cover_art_service
 
             await lyrics_service.close()
+            await cover_art_service.close()
 
         with suppress(Exception):
             await close_db()
@@ -271,17 +283,29 @@ async def handle_ws_message(websocket: WebSocket, message: dict):
             ws_manager.unsubscribe(websocket, channel)
 
     elif msg_type == "device_command":
+        cmd = message.get("command")
+        if not isinstance(cmd, str) or not cmd.strip():
+            await websocket.send_json({"type": "error", "message": "Invalid device_command"})
+            return
         manager = serial_state.get_serial_manager()
         if manager and manager.is_connected:
-            await manager.send_command(message.get("command"), message.get("payload"))
+            await manager.send_command(cmd, message.get("payload"))
 
     elif msg_type == "voice_query":
-        result = await voice_assistant.process_query(
-            message.get("text", ""), message.get("context")
-        )
-        await websocket.send_json({"type": "voice_response", **result})
+        try:
+            result = await voice_assistant.process_query(
+                message.get("text", ""), message.get("context")
+            )
+            await websocket.send_json({"type": "voice_response", **result})
+        except Exception as exc:
+            logger.exception("WS voice_query failed")
+            await websocket.send_json({"type": "error", "message": str(exc)})
 
     elif msg_type == "notification":
+        try:
+            prio = int(message.get("priority", 1) or 1)
+        except (TypeError, ValueError):
+            prio = 1
         notification = deskmate_service.add_notification(
             title=message.get("title", "Notification"),
             message=message.get("message", ""),
@@ -292,7 +316,7 @@ async def handle_ws_message(websocket: WebSocket, message: dict):
         await companion_service.push_notification(
             notification.title,
             notification.message,
-            priority=int(message.get("priority", 1) or 1),
+            priority=prio,
             notification_id=notification.id,
         )
 
@@ -318,8 +342,10 @@ async def serial_read_task():
         manager = serial_state.get_serial_manager()
         if manager and manager.is_connected:
             try:
-                line = await manager.read_line()
-                if line:
+                while True:
+                    line = await manager.read_line()
+                    if not line:
+                        break
                     try:
                         payload = json.loads(line)
                     except json.JSONDecodeError:
@@ -332,7 +358,7 @@ async def serial_read_task():
                             await ws_manager.broadcast(event["channel"], event["data"])
             except Exception as exc:  # pragma: no cover - hardware dependent
                 logger.error("Serial read error: %s", exc)
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(0.05)
 
 
 async def lyrics_refresh_task():
@@ -372,10 +398,6 @@ async def companion_state_task():
     interval = max(0.5, float(settings.companion_push_interval))
     while True:
         try:
-            # Refresh lyrics + cover art on every tick so new tracks are
-            # detected even when the device hasn't sent a music message.
-            # Cache keys make this a no-op when nothing changed.
-            await companion_service.refresh_lyrics()
             summary = companion_service.get_summary()
             await ws_manager.broadcast("deskbuddy_state", summary)
             await ws_manager.broadcast(
@@ -404,6 +426,39 @@ async def companion_state_task():
             logger.exception("Companion state push failed")
 
         await asyncio.sleep(interval)
+
+
+async def hardware_reconnect_task():
+    """Plug-and-play USB auto-reconnect when the ESP32 is plugged in after boot."""
+    while True:
+        await asyncio.sleep(3.0)
+        try:
+            if not hardware_bridge.is_connected and not getattr(hardware_bridge, "_manual_disconnect", False):
+                if await hardware_bridge.connect():
+                    logger.info("Auto-reconnected to ESP32 on %s", hardware_bridge.port)
+                    companion_service.touch_device()
+                    with suppress(Exception):
+                        from app.services.device_settings import push_all
+                        await push_all(hardware_bridge)
+        except Exception:
+            logger.debug("Auto-reconnect attempt failed", exc_info=True)
+
+
+async def pc_audio_stream_task():
+    """Stream real-time PC audio FFT (bass/mid/high/level/beat) to the ESP32 LED ring."""
+    from app.services.pc_audio import pc_audio_service
+
+    sent_silence = False
+    while True:
+        try:
+            if hardware_bridge.is_connected:
+                frame = pc_audio_service.get_frame()
+                if frame["lvl"] > 0 or not sent_silence:
+                    await hardware_bridge.send_command("led_audio", frame)
+                    sent_silence = frame["lvl"] == 0
+        except Exception:
+            logger.debug("PC audio stream failed", exc_info=True)
+        await asyncio.sleep(0.05)
 
 
 async def pc_metrics_broadcast_task():

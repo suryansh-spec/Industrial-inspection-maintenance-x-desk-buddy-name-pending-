@@ -184,7 +184,11 @@ class NotificationService:
         
         # Send via Apprise (email, webhook, push, etc.)
         if channels is None or "email" in channels or "webhook" in channels or "pushover" in channels:
-            asyncio.create_task(self._send_via_apprise(notification))
+            task = asyncio.create_task(self._send_via_apprise(notification))
+            if not hasattr(self, "_bg_tasks"):
+                self._bg_tasks = set()
+            self._bg_tasks.add(task)
+            task.add_done_callback(self._bg_tasks.discard)
         
         # Send via WebSocket for real-time
         from app.core.events import event_bus, EventType, Event
@@ -216,14 +220,20 @@ class NotificationService:
                 for action in notification["actions"]:
                     body += f"- {action.get('label', 'Action')}: {action.get('action', '')}\n"
             
+            notify_type_map = {
+                "low": "info",
+                "normal": "info",
+                "high": "warning",
+                "urgent": "failure",
+            }
+            apprise_type = notify_type_map.get(str(notification.get("priority", "normal")).lower(), "info")
+
             # Send via Apprise
-            await asyncio.get_event_loop().run_in_executor(
-                None,
-                lambda: self.apprise.notify(
-                    body=body,
-                    title=notification["title"],
-                    notify_type=notification["priority"]
-                )
+            await asyncio.to_thread(
+                self.apprise.notify,
+                body=body,
+                title=notification["title"],
+                notify_type=apprise_type,
             )
             
             # Update status
@@ -272,10 +282,10 @@ class NotificationService:
                 status=NotificationStatus(notification["status"]),
                 category=notification["category"],
                 source=notification["source"],
-                user_id=notification.get("user_id"),
+                user_id=user_id,
                 channels=notification.get("channels", []),
                 actions=notification.get("actions", []),
-                metadata=notification.get("metadata", {}),
+                notification_metadata=notification.get("metadata", {}),
                 expires_at=datetime.fromisoformat(notification["expires_at"]) if notification.get("expires_at") else None
             )
             

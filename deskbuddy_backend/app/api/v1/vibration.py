@@ -91,18 +91,28 @@ async def analyze_vibration_upload(
     sample_rate_hz: int = Form(default=1000)
 ):
     """Analyze vibration from uploaded CSV/JSON file."""
-    import pandas as pd
+    import asyncio
     import io
-    
-    content = await file.read()
-    
+    import pandas as pd
+
+    if method not in {"auto", "cnn", "traditional", "both"}:
+        raise HTTPException(400, "Invalid method. Use 'auto', 'cnn', 'traditional', or 'both'.")
+    if not (1 <= sample_rate_hz <= 100000):
+        raise HTTPException(400, "sample_rate_hz must be between 1 and 100000.")
+
+    max_bytes = 10 * 1024 * 1024
+    content = await file.read(max_bytes + 1)
+    if len(content) > max_bytes:
+        raise HTTPException(413, "Uploaded file exceeds 10 MB limit.")
+
+    filename = (file.filename or "").lower()
     try:
-        if file.filename.endswith('.csv'):
-            df = pd.read_csv(io.BytesIO(content))
+        if filename.endswith('.csv'):
+            df = await asyncio.to_thread(pd.read_csv, io.BytesIO(content))
             x = df['x'].values.astype(np.float32)
             y = df['y'].values.astype(np.float32)
             z = df['z'].values.astype(np.float32)
-        elif file.filename.endswith('.json'):
+        elif filename.endswith('.json'):
             import json
             data = json.loads(content)
             x = np.array(data['x'], dtype=np.float32)
@@ -110,8 +120,15 @@ async def analyze_vibration_upload(
             z = np.array(data['z'], dtype=np.float32)
         else:
             raise HTTPException(400, "Unsupported file format. Use CSV or JSON.")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(400, f"Failed to parse file: {e}")
+
+    if not (len(x) == len(y) == len(z)):
+        raise HTTPException(400, "X, Y, Z arrays must have the same length.")
+    if len(x) < 3:
+        raise HTTPException(400, "Need at least 3 samples for vibration analysis.")
     
     result = await analyze(x, y, z, sample_rate_hz, method)
     

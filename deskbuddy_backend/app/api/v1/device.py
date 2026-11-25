@@ -19,7 +19,7 @@ class DeviceStatus(BaseModel):
     port: Optional[str] = None
     baudrate: int = 115200
     firmware_version: Optional[str] = None
-    sensors: Dict[str, str] = {}
+    sensors: Dict[str, Any] = {}
 
 
 class ModeSwitchRequest(BaseModel):
@@ -40,7 +40,7 @@ async def get_device_status():
         port=hardware_bridge.port if connected else None,
         baudrate=115200,
         firmware_version=hardware_bridge.firmware_version if connected else None,
-        sensors=hardware_bridge.get_sensor_data() if connected else {},
+        sensors=hardware_bridge.get_cached_sensor_data() if connected else {},
     )
 
 
@@ -70,7 +70,7 @@ async def connect_device(port: Optional[str] = None):
 @router.post("/disconnect")
 async def disconnect_device():
     """Disconnect from device."""
-    await hardware_bridge.disconnect()
+    await hardware_bridge.disconnect(manual=True)
     return {"status": "disconnected"}
 
 

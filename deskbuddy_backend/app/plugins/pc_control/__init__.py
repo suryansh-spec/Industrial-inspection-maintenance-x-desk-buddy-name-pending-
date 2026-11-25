@@ -81,8 +81,10 @@ class Plugin(DeskBuddyPlugin):
         return base64.b64encode(buf.getvalue()).decode()
 
     async def open_application(self, app_name: str) -> bool:
+        if not app_name or any(ch in app_name for ch in ("&", "|", ";", ">", "<", "`", "$")):
+            raise ValueError("Invalid application name")
         if self._platform == "windows":
-            subprocess.Popen(app_name, shell=True)
+            subprocess.Popen([app_name], shell=False)
         elif self._platform == "darwin":
             subprocess.Popen(["open", "-a", app_name])
         else:

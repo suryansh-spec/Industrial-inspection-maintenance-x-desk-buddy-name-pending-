@@ -138,6 +138,11 @@ class LyricsService:
         if not title:
             return None
 
+        title = (title or "").strip()
+        artist = (artist or "").strip()
+        if not title or not artist:
+            return None
+
         key = self.cache_key(title, artist, duration_ms)
         hit, cached = self._cached(key)
         if hit:

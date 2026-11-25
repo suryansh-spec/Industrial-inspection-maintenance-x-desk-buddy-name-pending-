@@ -18,10 +18,12 @@
 void ledInit();
 void ledUpdate(unsigned long now);
 void ledApplyCommand(JsonObjectConst payload);
+void ledApplyAudio(JsonObjectConst payload);
 bool ledIsOk();
 #else
 inline void ledInit() {}
 inline void ledUpdate(unsigned long) {}
 inline void ledApplyCommand(JsonObjectConst) {}
+inline void ledApplyAudio(JsonObjectConst) {}
 inline bool ledIsOk() { return false; }
 #endif
