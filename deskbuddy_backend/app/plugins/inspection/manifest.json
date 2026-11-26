@@ -1,0 +1,25 @@
+{
+  "id": "inspection",
+  "name": "Industrial Inspection",
+  "version": "1.0.0",
+  "description": "Vibration analysis, CNN classification, vision inspection",
+  "author": "desk-buddy",
+  "category": "inspection",
+  "dependencies": ["core"],
+  "enabled_by_default": true,
+  "config_schema": {
+    "type": "object",
+    "properties": {
+      "vibration_enabled": {"type": "boolean"},
+      "vision_enabled": {"type": "boolean"},
+      "auto_capture": {"type": "boolean"},
+      "capture_duration_ms": {"type": "integer"}
+    }
+  },
+  "default_config": {
+    "vibration_enabled": true,
+    "vision_enabled": false,
+    "auto_capture": false,
+    "capture_duration_ms": 2000
+  }
+}

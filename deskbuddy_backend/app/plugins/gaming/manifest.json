@@ -1,0 +1,31 @@
+{
+  "id": "gaming",
+  "name": "Gaming Mode",
+  "version": "1.0.0",
+  "description": "Game detection, session tracking, GPU/CPU monitoring, temperature alerts",
+  "author": "desk-buddy",
+  "category": "gaming",
+  "dependencies": ["core"],
+  "enabled_by_default": false,
+  "config_schema": {
+    "type": "object",
+    "properties": {
+      "auto_detect": {"type": "boolean"},
+      "gpu_threshold": {"type": "number"},
+      "cpu_threshold": {"type": "number"},
+      "sustained_seconds": {"type": "integer"},
+      "gpu_temp_threshold": {"type": "number"},
+      "cpu_temp_threshold": {"type": "number"},
+      "vram_threshold": {"type": "number"}
+    }
+  },
+  "default_config": {
+    "auto_detect": true,
+    "gpu_threshold": 30.0,
+    "cpu_threshold": 25.0,
+    "sustained_seconds": 10,
+    "gpu_temp_threshold": 80.0,
+    "cpu_temp_threshold": 85.0,
+    "vram_threshold": 90.0
+  }
+}

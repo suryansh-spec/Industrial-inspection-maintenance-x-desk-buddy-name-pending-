@@ -1,0 +1,25 @@
+{
+  "id": "ai",
+  "name": "AI Assistant",
+  "version": "0.1.0",
+  "description": "Nemotron LLM, STT, TTS voice assistant",
+  "author": "desk-buddy",
+  "category": "ai",
+  "dependencies": ["core"],
+  "enabled_by_default": false,
+  "config_schema": {
+    "type": "object",
+    "properties": {
+      "llm_provider": {"type": "string", "enum": ["nemotron", "openai", "anthropic", "ollama"]},
+      "stt_provider": {"type": "string", "enum": ["whisper", "google", "azure"]},
+      "tts_provider": {"type": "string", "enum": ["piper", "edge", "azure"]},
+      "wake_word": {"type": "string"}
+    }
+  },
+  "default_config": {
+    "llm_provider": "nemotron",
+    "stt_provider": "whisper",
+    "tts_provider": "piper",
+    "wake_word": "hey deskbuddy"
+  }
+}

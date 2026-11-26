@@ -1,0 +1,32 @@
+{
+  "id": "core",
+  "name": "Core",
+  "version": "1.0.0",
+  "description": "Core activity detection, sensor management, and state orchestration",
+  "author": "desk-buddy",
+  "category": "core",
+  "dependencies": [],
+  "enabled_by_default": true,
+  "config_schema": {
+    "type": "object",
+    "properties": {
+      "poll_interval_ms": {"type": "integer", "minimum": 100, "maximum": 5000},
+      "sleep_thresholds": {
+        "type": "object",
+        "properties": {
+          "sleepy_seconds": {"type": "integer"},
+          "sleep_seconds": {"type": "integer"},
+          "deep_sleep_seconds": {"type": "integer"}
+        }
+      }
+    }
+  },
+  "default_config": {
+    "poll_interval_ms": 1000,
+    "sleep_thresholds": {
+      "sleepy_seconds": 30,
+      "sleep_seconds": 120,
+      "deep_sleep_seconds": 300
+    }
+  }
+}

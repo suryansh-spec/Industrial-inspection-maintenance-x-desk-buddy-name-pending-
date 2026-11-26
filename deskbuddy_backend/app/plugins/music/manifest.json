@@ -1,0 +1,25 @@
+{
+  "id": "music",
+  "name": "Music Engine",
+  "version": "1.0.0",
+  "description": "SMTC media control, cover art, lyrics, spectrum analyser",
+  "author": "desk-buddy",
+  "category": "music",
+  "dependencies": ["core"],
+  "enabled_by_default": true,
+  "config_schema": {
+    "type": "object",
+    "properties": {
+      "provider": {"type": "string", "enum": ["windows_media", "ytmusic", "spotify", "apple_music"]},
+      "lyrics_enabled": {"type": "boolean"},
+      "cover_art_enabled": {"type": "boolean"},
+      "spectrum_bands": {"type": "integer", "minimum": 8, "maximum": 64}
+    }
+  },
+  "default_config": {
+    "provider": "windows_media",
+    "lyrics_enabled": true,
+    "cover_art_enabled": true,
+    "spectrum_bands": 32
+  }
+}

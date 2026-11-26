@@ -1,0 +1,21 @@
+{
+  "id": "pc_control",
+  "name": "PC Controller",
+  "version": "1.0.0",
+  "description": "Lock PC, volume, brightness, screenshot, open apps",
+  "author": "desk-buddy",
+  "category": "pc_control",
+  "dependencies": ["core"],
+  "enabled_by_default": true,
+  "config_schema": {
+    "type": "object",
+    "properties": {
+      "allowed_apps": {"type": "array", "items": {"type": "string"}},
+      "screenshot_dir": {"type": "string"}
+    }
+  },
+  "default_config": {
+    "allowed_apps": [],
+    "screenshot_dir": "~/Pictures/DeskBuddy"
+  }
+}
