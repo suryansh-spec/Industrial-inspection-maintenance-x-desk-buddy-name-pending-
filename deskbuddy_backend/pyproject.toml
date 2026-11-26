@@ -38,7 +38,6 @@ dependencies = [
     "aiohttp==3.10.0",
     "ytmusicapi==1.6.0",
     "yt-dlp==2024.11.18",
-    "evdev==1.8.0; sys_platform == 'linux'",
     "hidapi==0.14.0",
     "pyserial==3.5",
     "python-jose[cryptography]==3.3.0",
