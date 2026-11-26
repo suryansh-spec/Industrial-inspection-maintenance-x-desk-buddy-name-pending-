@@ -28,7 +28,7 @@ logs/
 *.sqlite3
 
 # Models
-models/
+/models/
 *.pth
 *.pt
 *.onnx
