@@ -1,0 +1,14 @@
+{
+  "enabled": [
+    "core",
+    "music",
+    "gaming",
+    "inspection",
+    "pc_control"
+  ],
+  "disabled": [
+    "ai",
+    "productivity",
+    "devtools"
+  ]
+}
