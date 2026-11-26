@@ -1,5 +1,5 @@
 """
-Configuration management for DeskBuddy Backend.
+Configuration management for Omnipect Backend.
 """
 import os
 from pathlib import Path
@@ -10,7 +10,7 @@ from pydantic import Field
 
 class Settings(BaseSettings):
     # Application
-    app_name: str = "DeskBuddy Backend"
+    app_name: str = "Omnipect Backend"
     version: str = "1.0.0"
     debug: bool = True
     api_prefix: str = "/api/v1"

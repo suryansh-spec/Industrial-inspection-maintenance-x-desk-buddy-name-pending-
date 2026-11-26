@@ -1,4 +1,4 @@
-# 🤖 DeskBuddy — Industrial Inspection & Desk Companion
+# 🤖 Omnipect — Industrial Inspection & Desk Companion
 
 > **Dual-mode intelligent device: AI-powered industrial vibration inspection + PC-aware desk companion.**
 > Built on ESP32-S3 N16R8, driven by a unified Python backend with a React web control panel.
@@ -23,9 +23,9 @@
 
 ## Overview
 
-DeskBuddy is a single ESP32-S3 device that switches between two personalities:
+Omnipect is a single ESP32-S3 device that switches between two personalities:
 
-1. **Desk Buddy mode** — A PC-aware desk companion with an expressive OLED face, TFT dashboard, music/lyrics, notifications, Pomodoro, battery/mic telemetry, gaming mode, and a customizable device theme.
+1. **Omnipect mode** — A PC-aware desk companion with an expressive OLED face, TFT dashboard, music/lyrics, notifications, Pomodoro, battery/mic telemetry, gaming mode, and a customizable device theme.
 2. **Industrial Inspection mode** — A handheld vibration/acoustic analyzer that captures sensor data, runs a CNN + traditional analysis pipeline on a backend, and reports equipment health & Remaining Useful Life (RUL).
 
 A single backend (`deskbuddy_backend`) serves both modes over serial, WebSocket, and REST. A React web panel (single HTML file, no Node.js needed) provides full control.

@@ -1,0 +1,70 @@
+{
+  "test_accuracy": 100.0,
+  "accuracy_pct": 100.0,
+  "best_epoch": 38,
+  "class_names": [
+    "Normal",
+    "Inner Race",
+    "Ball",
+    "Outer Race"
+  ],
+  "window_size": 1024,
+  "sample_rate_hz": 12000,
+  "input_channels": 1,
+  "architecture": "ExtensiveCNN-light",
+  "use_spectral": false,
+  "dataset": "CWRU",
+  "preset": "minimal",
+  "class_metrics": {
+    "0": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 72
+    },
+    "1": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 35
+    },
+    "2": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 36
+    },
+    "3": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 35
+    }
+  },
+  "confusion_matrix": [
+    [
+      72,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      35,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      36,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      35
+    ]
+  ]
+}

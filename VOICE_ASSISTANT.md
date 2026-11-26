@@ -1,4 +1,4 @@
-# Voice Assistant — DeskBuddy
+# Voice Assistant — Omnipect
 
 Push-to-talk voice assistant pipeline: **VOICE button → Wi-Fi HTTP → STT (faster-whisper tiny.en) → Nemotron LLM → TTS (edge-ttS) → 16 kHz PCM WAV → MAX98357A → speaker**.
 

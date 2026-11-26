@@ -1,9 +1,9 @@
-"""DeskBuddy PC Agent.
+"""Omnipect PC Agent.
 
 Run this script on your laptop/PC when `deskbuddy_backend` is deployed on the
 cloud (e.g., Railway). It collects local foreground window activity, system
 metrics (CPU/RAM/GPU), and music status, then continuously pushes them to the
-cloud backend so your wireless DeskBuddy companion reflects your PC in real-time.
+cloud backend so your wireless Omnipect companion reflects your PC in real-time.
 """
 
 import argparse
@@ -99,7 +99,7 @@ def collect_metrics() -> Dict[str, Any]:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="DeskBuddy Cloud PC Agent")
+    parser = argparse.ArgumentParser(description="Omnipect Cloud PC Agent")
     parser.add_argument(
         "--url",
         default=os.getenv(
@@ -127,7 +127,7 @@ def main():
         headers["x-agent-token"] = args.token
 
     print("=" * 60)
-    print("  DeskBuddy Cloud PC Agent")
+    print("  Omnipect Cloud PC Agent")
     print(f"  Target: {endpoint}")
     print("  Streaming PC activity to cloud...")
     print("=" * 60)

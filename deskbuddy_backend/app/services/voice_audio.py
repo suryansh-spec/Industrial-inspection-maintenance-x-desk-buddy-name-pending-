@@ -10,6 +10,7 @@ WAV files, and TTS falls back to Windows SAPI when edge-tts is unavailable.
 """
 from __future__ import annotations
 
+import asyncio
 import io
 import logging
 import os

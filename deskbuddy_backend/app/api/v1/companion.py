@@ -1,5 +1,5 @@
 """
-DeskBuddy companion API.
+Omnipect companion API.
 
 Exposes the PC-context/expression state used by the OLED face and the TFT
 dashboard. The same state is broadcast over ``/ws`` on the

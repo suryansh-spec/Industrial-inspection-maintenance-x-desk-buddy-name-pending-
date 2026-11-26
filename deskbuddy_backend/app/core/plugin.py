@@ -56,7 +56,7 @@ class PluginContext:
         await self.state.set(key, value, source=self.config.get("id"))
 
 
-class DeskBuddyPlugin(ABC):
+class OmnipectPlugin(ABC):
     """Base class for all plugins."""
 
     manifest: PluginManifest
@@ -122,3 +122,7 @@ class DeskBuddyPlugin(ABC):
             task.cancel()
         await asyncio.gather(*self._tasks, return_exceptions=True)
         self._tasks.clear()
+
+
+# Backward compatibility alias
+DeskBuddyPlugin = OmnipectPlugin

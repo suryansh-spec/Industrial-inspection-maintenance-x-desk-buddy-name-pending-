@@ -240,7 +240,7 @@ class VoiceAssistant:
             await self.initialize()
 
         system_prompt = (
-            "You are DeskBuddy, an intelligent desk companion and industrial machine inspector. "
+            "You are Omnipect, an intelligent desk companion and industrial machine inspector. "
             "You have tools to examine motor health, predict Remaining Useful Life (RUL), "
             "control music and lyrics, and display expressions. "
             "When asked to check machines, play music, or change expressions, call the appropriate tool. "

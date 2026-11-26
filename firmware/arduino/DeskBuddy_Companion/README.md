@@ -1,6 +1,6 @@
-# DeskBuddy Companion Firmware
+# Omnipect Companion Firmware
 
-Arduino IDE sketch for the ESP32-S3 DeskBuddy. It renders an expressive OLED
+Arduino IDE sketch for the ESP32-S3 Omnipect. It renders an expressive OLED
 face, a multi-page ST7735 dashboard, and talks to `deskbuddy_backend` over a
 newline-delimited JSON serial link at 115200 baud.
 

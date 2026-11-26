@@ -1,4 +1,4 @@
-# DeskBuddy Backend
+# Omnipect Backend
 
 Unified backend for the **Industrial Inspection & Desk Companion** system.
 

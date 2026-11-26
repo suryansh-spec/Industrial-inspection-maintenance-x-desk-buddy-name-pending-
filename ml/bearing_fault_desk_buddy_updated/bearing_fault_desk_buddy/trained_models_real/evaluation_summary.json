@@ -1,0 +1,82 @@
+{
+  "test_accuracy": 75.3125,
+  "accuracy_pct": 75.31,
+  "best_epoch": 30,
+  "class_names": [
+    "Normal",
+    "Inner",
+    "Ball",
+    "Outer"
+  ],
+  "window_size": 1024,
+  "sample_rate_hz": 12000,
+  "input_channels": 1,
+  "architecture": "ExtensiveCNN-light",
+  "use_spectral": false,
+  "dataset": "CWRU_12k_DE_40files",
+  "test_recordings": [
+    "100",
+    "108",
+    "121",
+    "133"
+  ],
+  "val_recordings": [
+    "99",
+    "172",
+    "188",
+    "200"
+  ],
+  "class_metrics": {
+    "0": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 500
+    },
+    "1": {
+      "precision": 0.6839,
+      "recall": 1.0,
+      "f1": 0.8123,
+      "support": 476
+    },
+    "2": {
+      "precision": 0.6492,
+      "recall": 1.0,
+      "f1": 0.7873,
+      "support": 470
+    },
+    "3": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "support": 474
+    }
+  },
+  "confusion_matrix": [
+    [
+      500,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      476,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      470,
+      0
+    ],
+    [
+      0,
+      220,
+      254,
+      0
+    ]
+  ],
+  "note": "Recording-level split \u2014 no window-level data leakage"
+}

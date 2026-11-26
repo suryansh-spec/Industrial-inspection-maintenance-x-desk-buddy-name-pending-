@@ -124,7 +124,7 @@ NEMOTRON_TOOLS_SCHEMA: List[Dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "set_buddy_expression",
-            "description": "Set the emotional or reactive eye expression on the DeskBuddy OLED screen.",
+            "description": "Set the emotional or reactive eye expression on the Omnipect OLED screen.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -164,13 +164,13 @@ NEMOTRON_TOOLS_SCHEMA: List[Dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "set_desk_mode",
-            "description": "Switch operating mode between 'desk_buddy' (companion) and 'inspection'.",
+            "description": "Switch operating mode between 'omnipect' (companion) and 'inspection'.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "mode": {
                         "type": "string",
-                        "enum": ["desk_buddy", "inspection"],
+                        "enum": ["omnipect", "inspection", "desk_buddy"],
                         "description": "Target operating mode",
                     }
                 },
@@ -333,7 +333,7 @@ async def tool_set_buddy_expression(expression: str) -> Dict[str, Any]:
 
         manager = serial_state.get_serial_manager()
         if manager and manager.is_connected:
-            await manager.send_command("deskbuddy_state", {"expr": expression})
+            await manager.send_command("omnipect_state", {"expr": expression})
 
         return {"expression": expression, "status": "applied"}
     except Exception as exc:

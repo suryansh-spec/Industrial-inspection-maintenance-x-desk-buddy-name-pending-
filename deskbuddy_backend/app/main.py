@@ -1,7 +1,7 @@
 """
-DeskBuddy Backend - Main Application Entry Point.
+Omnipect Backend - Main Application Entry Point.
 
-Unified backend for Industrial Inspection & Desk Companion.
+Unified backend for Industrial Inspection & Omnipect Companion.
 Integrates: DeskMate + deskey-v2 + Hermes + StatNode + yt-music-companion
 """
 import asyncio
@@ -63,7 +63,7 @@ async def _optional_startup(name: str, awaitable) -> bool:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager - startup and shutdown."""
-    logger.info("Starting DeskBuddy Backend...")
+    logger.info("Starting Omnipect Backend...")
 
     # Database (non-fatal: the app can run in degraded mode without a DB)
     try:
@@ -135,12 +135,12 @@ async def lifespan(app: FastAPI):
         _background_tasks.append(asyncio.create_task(pc_audio_stream_task()))
         _background_tasks.append(asyncio.create_task(hardware_reconnect_task()))
 
-    logger.info("DeskBuddy Backend started successfully")
+    logger.info("Omnipect Backend started successfully")
 
     try:
         yield
     finally:
-        logger.info("Shutting down DeskBuddy Backend...")
+        logger.info("Shutting down Omnipect Backend...")
 
         for task in _background_tasks:
             task.cancel()
@@ -181,12 +181,12 @@ async def lifespan(app: FastAPI):
         with suppress(Exception):
             await close_db()
 
-        logger.info("DeskBuddy Backend stopped")
+        logger.info("Omnipect Backend stopped")
 
 
 app = FastAPI(
-    title="DeskBuddy Backend",
-    description="Unified backend for Industrial Inspection & Desk Companion",
+    title="Omnipect Backend",
+    description="Unified backend for Industrial Inspection & Omnipect Companion",
     version="1.0.0",
     lifespan=lifespan,
     docs_url="/docs",
@@ -430,6 +430,7 @@ async def companion_state_task():
     while True:
         try:
             summary = companion_service.get_summary()
+            await ws_manager.broadcast("omnipect_state", summary)
             await ws_manager.broadcast("deskbuddy_state", summary)
             await ws_manager.broadcast(
                 "activity",
@@ -450,7 +451,7 @@ async def companion_state_task():
             state = companion_service.get_device_state(summary=summary)
             if hardware_bridge.is_connected:
                 await hardware_bridge.send_command(
-                    "deskbuddy_state",
+                    "omnipect_state",
                     state,
                 )
         except Exception:

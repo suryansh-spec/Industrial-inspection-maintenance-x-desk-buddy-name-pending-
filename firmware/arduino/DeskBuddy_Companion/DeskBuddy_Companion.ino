@@ -63,6 +63,7 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <SPI.h>
+#include "driver/gpio.h"
 #include <U8g2lib.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7735.h>
@@ -263,8 +264,9 @@ Adafruit_ADXL345_Unified adxl(12345);
 // State vocabulary
 // ----------------------------------------------------------------------------
 enum DeviceMode {
-  MODE_DESK_BUDDY,
-  MODE_INSPECTION
+  MODE_OMNIPECT,
+  MODE_INSPECTION,
+  MODE_DESK_BUDDY = MODE_OMNIPECT
 };
 
 enum ScreenPage {
@@ -394,6 +396,39 @@ I2SClass i2s;
 int32_t micBuffer[320];
 float micLevelSmoothed = 0.0f;
 
+I2SClass audioOut;
+bool audioOutReady = false;
+
+void playI2STone(int frequency, int durationMs) {
+  if (!audioOutReady || frequency <= 0 || durationMs <= 0) return;
+  int totalSamples = (16000 * durationMs) / 1000;
+  int16_t buffer[64];
+  float phaseStep = 2.0f * 3.14159265f * (float)frequency / 16000.0f;
+  float phase = 0.0f;
+  int sent = 0;
+  while (sent < totalSamples) {
+    int batch = totalSamples - sent;
+    if (batch > 64) batch = 64;
+    for (int i = 0; i < batch; i++) {
+      buffer[i] = (int16_t)(sinf(phase) * 14000.0f);
+      phase += phaseStep;
+      if (phase >= 6.2831853f) phase -= 6.2831853f;
+    }
+    audioOut.write((const uint8_t*)buffer, batch * sizeof(int16_t));
+    sent += batch;
+  }
+}
+
+void playStartupMelody() {
+  playI2STone(523, 90);   // C5
+  delay(15);
+  playI2STone(659, 90);   // E5
+  delay(15);
+  playI2STone(784, 90);   // G5
+  delay(15);
+  playI2STone(1046, 220); // C6
+}
+
 // FFT visualizer state (256-point real FFT on mic samples)
 #define FFT_N 256
 #define FFT_BARS 16
@@ -407,7 +442,7 @@ PomodoroState pomodoro;
 Note notes[8];
 int noteCount = 0;
 
-DeviceMode mode = MODE_DESK_BUDDY;
+DeviceMode mode = MODE_OMNIPECT;
 ScreenPage page = PAGE_HOME;
 
 EyeExpression currentExpr = EXPR_RELAXED;
@@ -770,7 +805,7 @@ const char* pageName(ScreenPage value) {
 }
 
 const char* modeName() {
-  return mode == MODE_INSPECTION ? "inspection" : "desk_buddy";
+  return mode == MODE_INSPECTION ? "inspection" : "omnipect";
 }
 
 const char* expressionName(EyeExpression value) {
@@ -840,31 +875,69 @@ void triggerWake(unsigned long durationMs) {
 
 void beep(int frequency, int durationMs) {
   if (PIN_SPEAKER >= 0) tone(PIN_SPEAKER, frequency, durationMs);
+  playI2STone(frequency, durationMs);
 }
 
 void doubleBeep() {
-  if (PIN_SPEAKER >= 0) {
-    tone(PIN_SPEAKER, 1500, 70);
-    delay(90);
-    tone(PIN_SPEAKER, 1900, 90);
-  }
+  beep(1500, 70);
+  delay(90);
+  beep(1900, 90);
 }
 
 // ----------------------------------------------------------------------------
 // Hardware setup
 // ----------------------------------------------------------------------------
+static unsigned long buttonPressStartMs[5] = {0, 0, 0, 0, 0};
+
 void initButtons() {
   for (int i = 0; i < 5; i++) {
+    gpio_num_t pin = (gpio_num_t)BUTTON_PINS[i];
+    gpio_reset_pin(pin);
     pinMode(BUTTON_PINS[i], INPUT_PULLUP);
-    buttonLastRead[i] = digitalRead(BUTTON_PINS[i]) == HIGH;
-    buttonStable[i] = buttonLastRead[i];
+    gpio_pullup_en(pin);
+    gpio_pulldown_dis(pin);
+  }
+  delay(10);
+  for (int i = 0; i < 5; i++) {
+    bool raw = (digitalRead(BUTTON_PINS[i]) == LOW);
+    buttonLastRead[i] = raw;
+    buttonStable[i] = raw;
+    buttonPressed[i] = false;
+    buttonDebounceMs[i] = millis();
+    buttonPressStartMs[i] = 0;
   }
 }
 
 void initOled() {
-  oled.setI2CAddress(0x3C << 1);
+  uint8_t detectedAddr = 0x3C;
+  Wire.beginTransmission(0x3C);
+  if (Wire.endTransmission() != 0) {
+    Wire.beginTransmission(0x3D);
+    if (Wire.endTransmission() == 0) {
+      detectedAddr = 0x3D;
+      Serial.println("[boot] OLED detected at 0x3D");
+    } else {
+      Serial.println("[boot] OLED not responding at 0x3C or 0x3D! Retrying 0x3C...");
+    }
+  } else {
+    Serial.println("[boot] OLED detected at 0x3C");
+  }
+
+  oled.setI2CAddress(detectedAddr << 1);
   oled.begin();
+
+  // Send hardware charge-pump & display-on commands for BOTH SSD1306 and SH1106
+  Wire.beginTransmission(detectedAddr);
+  Wire.write(0x00); // Command stream
+  Wire.write(0x8D); // SSD1306 Charge pump command
+  Wire.write(0x14); // SSD1306 Enable charge pump (7.5V)
+  Wire.write(0xAD); // SH1106 DC-DC command
+  Wire.write(0x8B); // SH1106 Enable DC-DC
+  Wire.write(0xAF); // Display ON
+  Wire.endTransmission();
+
   oled.setFont(u8g2_font_5x7_tf);
+  oled.setContrast(255);
 }
 
 void initTft() {
@@ -928,7 +1001,7 @@ void bootScreen() {
   drawEye(40, 32, 36, 28, 10, 0, 0, 7, 0, 0);
   drawEye(88, 32, 36, 28, 10, 0, 0, 7, 0, 0);
   oled.setFont(u8g2_font_6x10_tf);
-  oled.drawStr(30, 61, "DeskBuddy");
+  oled.drawStr(40, 61, "Omnipect");
   oled.sendBuffer();
 
   uiBoot();
@@ -1263,12 +1336,28 @@ void checkButtons() {
 
     if (now - buttonDebounceMs[i] > 30 && pressed != buttonStable[i]) {
       buttonStable[i] = pressed;
+      Serial.printf("[btn] pin=%d (%s) changed to %s (page=%d)\n",
+                    BUTTON_PINS[i], BUTTON_NAMES[i], pressed ? "PRESSED" : "RELEASED", (int)page);
+      Serial.flush();
       if (pressed) {
         buttonPressed[i] = true;
+        buttonPressStartMs[i] = now;
         lastMotionMs = now;
-        handleButton(i);
+        if (i != 0) { // MODE button evaluates on release to support short-tap (next page) vs hold (toggle mode)
+          handleButton(i);
+        }
       } else {
         buttonPressed[i] = false;
+        if (i == 0) { // MODE button
+          unsigned long duration = now - buttonPressStartMs[0];
+          if (duration >= 500) {
+            // Long press: Toggle between Omnipect and Industrial Inspection
+            toggleMode();
+          } else {
+            // Short tap: Cycle to Next Page!
+            nextPage();
+          }
+        }
       }
     }
   }
@@ -1385,7 +1474,7 @@ void previousPage() {
 }
 
 void toggleMode() {
-  mode = (mode == MODE_DESK_BUDDY) ? MODE_INSPECTION : MODE_DESK_BUDDY;
+  mode = (mode == MODE_OMNIPECT) ? MODE_INSPECTION : MODE_OMNIPECT;
   page = PAGE_HOME;
   tftDirty = true;
   tftFullRedraw = true;
@@ -1439,7 +1528,7 @@ void handleBackendLine(const String& line) {
     payload = rxDoc.as<JsonObjectConst>();
   }
 
-  if (strcmp(cmd, "deskbuddy_state") == 0) {
+  if (strcmp(cmd, "omnipect_state") == 0 || strcmp(cmd, "deskbuddy_state") == 0) {
     applyState(payload);
   } else if (strcmp(cmd, "notification") == 0) {
     applyNotification(payload);
@@ -1592,8 +1681,8 @@ void handleBackendLine(const String& line) {
     tftDirty = true;
     tftFullRedraw = true;
   } else if (strcmp(cmd, "mode_switch") == 0) {
-    const char* requested = payload["mode"] | "desk_buddy";
-    mode = (strcmp(requested, "inspection") == 0) ? MODE_INSPECTION : MODE_DESK_BUDDY;
+    const char* requested = payload["mode"] | "omnipect";
+    mode = (strcmp(requested, "inspection") == 0) ? MODE_INSPECTION : MODE_OMNIPECT;
     page = PAGE_HOME;
     tftDirty = true;
     tftFullRedraw = true;
@@ -1609,7 +1698,9 @@ void handleBackendLine(const String& line) {
   } else if (strcmp(cmd, "play_tone") == 0) {
     int frequency = payload["frequency"] | 1200;
     int duration = payload["duration"] | 100;
-    tone(PIN_SPEAKER, frequency, duration);
+    beep(frequency, duration);
+  } else if (strcmp(cmd, "test_speaker") == 0) {
+    playStartupMelody();
   } else if (strcmp(cmd, "led") == 0) {
     ledApplyCommand(payload);
     tftDirty = true;
@@ -1645,6 +1736,46 @@ void handleBackendLine(const String& line) {
     sendHeartbeat();
   } else if (strcmp(cmd, "get_sensors") == 0) {
     sendSensorData();
+  } else if (strcmp(cmd, "read_buttons") == 0) {
+    Serial.printf("[btns] mode(16)=%d, voice(17)=%d, up(19)=%d, down(18)=%d, sel(4)=%d\n",
+                  digitalRead(16), digitalRead(17), digitalRead(19), digitalRead(18), digitalRead(4));
+    Serial.flush();
+  } else if (strcmp(cmd, "scan_i2c") == 0) {
+    Serial.println("[cmd] scanning I2C bus...");
+    for (uint8_t a = 1; a < 127; a++) {
+      Wire.beginTransmission(a);
+      if (Wire.endTransmission() == 0) {
+        Serial.printf("[i2c] Found device at 0x%02X\n", a);
+      }
+    }
+    Serial.println("[cmd] I2C scan complete.");
+    Serial.flush();
+  } else if (strcmp(cmd, "oled_test") == 0) {
+    const char* chip = payload["chip"] | "sh1106";
+    int addr = payload["addr"] | 0x3C;
+    Serial.printf("[cmd] testing oled chip=%s addr=0x%02X\n", chip, addr);
+    if (strcmp(chip, "ssd1306") == 0) {
+      u8g2_Setup_ssd1306_i2c_128x64_noname_f(oled.getU8g2(), U8G2_R2, u8x8_byte_arduino_hw_i2c, u8x8_gpio_and_delay_arduino);
+    } else {
+      u8g2_Setup_sh1106_i2c_128x64_noname_f(oled.getU8g2(), U8G2_R2, u8x8_byte_arduino_hw_i2c, u8x8_gpio_and_delay_arduino);
+    }
+    oled.setI2CAddress(addr << 1);
+    oled.begin();
+
+    Wire.beginTransmission(addr);
+    Wire.write(0x00);
+    Wire.write(0x8D); Wire.write(0x14); // SSD1306 charge pump
+    Wire.write(0xAD); Wire.write(0x8B); // SH1106 DC-DC
+    Wire.write(0xAF);                   // Display ON
+    Wire.endTransmission();
+
+    oled.setContrast(255);
+    oled.clearBuffer();
+    oled.setFont(u8g2_font_10x20_tf);
+    oled.drawStr(10, 36, "OLED OK!");
+    oled.sendBuffer();
+    Serial.println("[cmd] oled_test complete.");
+    Serial.flush();
   }
 }
 
@@ -1683,6 +1814,10 @@ void sendSensorData() {
     accel["y"] = sensors.accelY;
     accel["z"] = sensors.accelZ;
   }
+  char pinBuf[48];
+  snprintf(pinBuf, sizeof(pinBuf), "M16:%d V17:%d U19:%d D18:%d S4:%d",
+           digitalRead(16), digitalRead(17), digitalRead(19), digitalRead(18), digitalRead(4));
+  data["pins"] = pinBuf;
 
   sendTx(txDoc);
 }
@@ -2713,7 +2848,6 @@ enum VoiceState {
   VOICE_ERROR
 };
 
-I2SClass audioOut;
 Preferences voicePrefs;
 
 VoiceState voiceState = VOICE_IDLE;
@@ -2859,7 +2993,7 @@ void drawVoiceOverlay(unsigned long now) {
   oled.clearBuffer();
   oled.setFont(u8g2_font_6x10_tf);
 
-  const char* title = "DeskBuddy";
+  const char* title = "Omnipect";
   switch (voiceState) {
     case VOICE_CONNECTING: title = "Connecting"; break;
     case VOICE_LISTENING:  title = "Listening"; break;
@@ -2867,7 +3001,7 @@ void drawVoiceOverlay(unsigned long now) {
     case VOICE_THINKING:   title = "Thinking"; break;
     case VOICE_SPEAKING:   title = "Speaking"; break;
     case VOICE_ERROR:      title = "Voice error"; break;
-    default:               title = "DeskBuddy"; break;
+    default:               title = "Omnipect"; break;
   }
   oled.drawStr(2, 10, title);
 
@@ -3096,7 +3230,7 @@ void voiceSendToBackend() {
     url += "/api/v1/voice/chat";
   }
   if (url.indexOf('?') < 0) {
-    url += "?session_id=deskbuddy&language=en";
+    url += "?session_id=omnipect&language=en";
   }
 
   HTTPClient http;
@@ -3105,8 +3239,10 @@ void voiceSendToBackend() {
     voiceSetError("HTTP begin failed");
     return;
   }
+  const char* headerKeys[] = {"X-Transcript", "X-Reply-Text"};
+  http.collectHeaders(headerKeys, 2);
   http.addHeader("Content-Type", "audio/wav");
-  http.addHeader("X-Session-Id", "deskbuddy");
+  http.addHeader("X-Session-Id", "omnipect");
   http.addHeader("X-Device", "esp32s3");
 
   int code = http.POST(voiceWav, voiceWavLen);
@@ -3325,8 +3461,10 @@ void voiceInit() {
   audioOut.setPins(PIN_AMP_BCLK, PIN_AMP_LRC, PIN_AMP_DIN, -1, -1);
   if (audioOut.begin(I2S_MODE_STD, VOICE_SAMPLE_RATE,
                      I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO)) {
+    audioOutReady = true;
     Serial.println("[voice] I2S TX ready (BCLK=40, LRC=41, DIN=42)");
   } else {
+    audioOutReady = false;
     Serial.println("[voice] I2S TX init failed (MAX98357A not wired yet?)");
   }
 
@@ -3352,7 +3490,7 @@ void setup() {
   Serial.begin(115200);
   delay(300);
   Serial.println();
-  Serial.println("=== DeskBuddy boot ===");
+  Serial.println("=== Omnipect boot ===");
   Serial.printf("reset_reason=%d psram=%d heap=%u\n",
                 (int)esp_reset_reason(), (int)psramFound(),
                 (unsigned)ESP.getFreeHeap());
@@ -3371,6 +3509,15 @@ void setup() {
 
   Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL);
   Wire.setClock(100000);
+
+  Serial.println("[boot] Scanning I2C bus...");
+  for (uint8_t a = 1; a < 127; a++) {
+    Wire.beginTransmission(a);
+    if (Wire.endTransmission() == 0) {
+      Serial.printf("[boot] Found I2C device at 0x%02X\n", a);
+    }
+  }
+  Serial.flush();
 
   Serial.println("[boot] buttons"); Serial.flush();
   initButtons();

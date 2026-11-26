@@ -773,7 +773,7 @@ static void uiNowPlayingCard(int y) {
 
 void drawHome() {
   uiBackground(theme.accent);
-  uiTopBar("DeskBuddy");
+  uiTopBar("Omnipect");
 
   // clock with a softly pulsing colon
   const char* clk = state.clockText[0] ? state.clockText : "--:--";
@@ -1478,7 +1478,7 @@ void drawInspectionPage() {
   uiDisc(22, 126, 2.5f + p, theme.accent, 70);
   uiDisc(22, 126, 2.5f, theme.accent);
   uiText(31, 129, "SELECT: start capture", F_REG, theme.text);
-  uiText(31, 141, "MODE: back to desk", F_REG, theme.secondary);
+  uiText(31, 141, "MODE: Omnipect mode", F_REG, theme.secondary);
 }
 
 // ----------------------------------------------------------------------------
@@ -1726,8 +1726,8 @@ void uiBoot() {
     uiArc(64, 58, 24, 5, 0.08f + 0.9f * e, theme.accent, 255, t * 9.0f);
     uiDisc(64, 58, 3.5f + 1.2f * sinf(t * 14.0f), theme.text, (uint8_t)(255 * uiClamp01(t * 3)));
     float a1 = uiClamp01((t - 0.25f) / 0.3f), a2 = uiClamp01((t - 0.45f) / 0.3f);
-    uiText(64, 104 + (int)((1 - a1) * 8), "DeskBuddy", F_BOLD, uiFade(theme.text, a1), 1);
-    uiText(64, 122, "PC-aware desk companion", F_REG, uiFade(theme.secondary, a2), 1);
+    uiText(64, 104 + (int)((1 - a1) * 8), "Omnipect", F_BOLD, uiFade(theme.text, a1), 1);
+    uiText(64, 122, "Smart Desk Companion", F_REG, uiFade(theme.secondary, a2), 1);
     uiText(64, 140, "v" FW_VERSION, F_REG, uiFade(theme.secondary, a2 * 0.7f), 1);
     uiPush(uiFb());
     delay(5);

@@ -1,5 +1,5 @@
 """
-DeskBuddy companion orchestration.
+Omnipect companion orchestration.
 
 Combines three layers:
 
@@ -46,7 +46,7 @@ class DeviceTelemetry:
     battery_charging: int = -1
     mic_level: int = -1
     page: str = "home"
-    mode: str = "desk_buddy"
+    mode: str = "omnipect"
     expression: str = ""
     firmware: str = ""
     last_gesture: str = ""

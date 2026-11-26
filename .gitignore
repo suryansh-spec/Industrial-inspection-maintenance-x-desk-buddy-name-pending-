@@ -13,6 +13,8 @@ deskbuddy_backend/logs/
 # Large datasets / models (optional - keep models if small)
 ml/datasets/cwru_raw/
 *.mat
+**/checkpoints/
+checkpoints/
 
 # OS
 .DS_Store
@@ -22,9 +24,12 @@ Thumbs.db
 *.bin
 *.elf
 *.map
+build/
+firmware/**/build/
 
 # Temp
 *.tmp
+test_out.docx
 
 # Environment / secrets
 .env
@@ -37,6 +42,7 @@ Thumbs.db
 firmware/arduino/DeskBuddy_Companion/voice_config.h
 
 # Local voice test audio
+*.wav
 deskbuddy_backend/test_question.wav
 
 # Embedded git repos / nested

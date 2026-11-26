@@ -211,6 +211,8 @@ class SettingsStore:
         value = self.get("button_map")
         if not isinstance(value, list) or len(value) != len(BUTTONS):
             return _default_button_map()
+        if any(not isinstance(row, list) or len(row) != len(PAGES) for row in value):
+            return _default_button_map()
         return value
 
     def set_button_map(self, rows: List[List[int]]) -> List[List[int]]:
