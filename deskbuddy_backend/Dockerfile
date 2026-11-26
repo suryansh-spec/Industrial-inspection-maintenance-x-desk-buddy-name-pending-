@@ -18,6 +18,7 @@ COPY web/ ./web/
 COPY alembic/ ./alembic/
 COPY alembic.ini .
 COPY plugins.json .
+COPY models/ ./models/
 RUN pip install --no-cache-dir -e .
 
 # Create necessary directories
