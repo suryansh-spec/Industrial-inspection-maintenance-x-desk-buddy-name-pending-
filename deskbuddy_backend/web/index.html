@@ -231,8 +231,11 @@ tbody tr:hover { background: rgba(var(--accent-rgb), .06); }
 <script type="text/babel">
 const { useState, useEffect, useRef, useCallback } = React;
 
-const API = "http://127.0.0.1:8080/api/v1";
-const WS_URL = "ws://127.0.0.1:8080/ws";
+const PROTO = window.location.protocol === "https:" ? "https:" : "http:";
+const WS_PROTO = window.location.protocol === "https:" ? "wss:" : "ws:";
+const HOST = window.location.host || "127.0.0.1:8080";
+const API = `${PROTO}//${HOST}/api/v1`;
+const WS_URL = `${WS_PROTO}//${HOST}/ws`;
 
 // ─── API helpers ───────────────────────────────────────────
 async function api(path, opts = {}) {
