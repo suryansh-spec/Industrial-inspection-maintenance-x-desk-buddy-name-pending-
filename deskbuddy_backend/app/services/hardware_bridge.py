@@ -95,6 +95,7 @@ class HardwareBridge:
         self._rx_buf = bytearray()
         self._inbound_queue: asyncio.Queue[str] = asyncio.Queue(maxsize=256)
         self._manual_disconnect = False
+        self._ws = None  # FastAPI WebSocket when the device is attached wirelessly
 
         # Buffer for incomplete lines
         self._buffer = ""
@@ -164,6 +165,50 @@ class HardwareBridge:
             self.state = ConnectionState.ERROR
             return False
     
+    async def attach_websocket(self, ws) -> None:
+        """Use an already-accepted WebSocket as the device transport.
+
+        This is the wireless/cloud path: the ESP32 mirrors its USB-serial JSON
+        protocol over ``wss://<host>/ws/device``. Blocks until the socket closes.
+        """
+        from fastapi import WebSocketDisconnect
+
+        if self.state == ConnectionState.CONNECTED:
+            await self.disconnect()
+
+        self._manual_disconnect = False
+        self._ws = ws
+        self.port = "websocket"
+        self.state = ConnectionState.CONNECTED
+        self._running = True
+        self._rx_buf.clear()
+
+        from app.services import serial_manager as serial_state
+        serial_state.set_serial_manager(self)
+        logger.info("Device attached over WebSocket")
+
+        try:
+            while True:
+                text = await ws.receive_text()
+                for raw in text.splitlines():
+                    line = raw.strip()
+                    if line:
+                        await self._process_line(line)
+        except WebSocketDisconnect:
+            pass
+        except Exception as exc:
+            logger.warning("Device WebSocket closed: %s", exc)
+        finally:
+            # Only tear down if this is still the active session.
+            if self._ws is ws:
+                self._ws = None
+                self._running = False
+                self.port = None
+                self.state = ConnectionState.DISCONNECTED
+                if serial_state.get_serial_manager() is self:
+                    serial_state.set_serial_manager(None)
+                logger.info("Device WebSocket detached")
+
     def _find_device_port(self) -> Optional[str]:
         """Auto-detect device port."""
         ports = serial.tools.list_ports.comports()
@@ -195,6 +240,13 @@ class HardwareBridge:
             except Exception:
                 pass
         self._serial = None
+
+        ws, self._ws = self._ws, None
+        if ws is not None:
+            try:
+                await ws.close()
+            except Exception:
+                pass
 
         from app.services import serial_manager as serial_state
         if serial_state.get_serial_manager() is self:
@@ -419,7 +471,10 @@ class HardwareBridge:
     
     async def send_command(self, command: str, payload: Optional[dict] = None) -> bool:
         """Send command to device."""
-        if not self.state == ConnectionState.CONNECTED or not self._serial or not self._serial.is_open:
+        has_ws = self._ws is not None
+        if not self.state == ConnectionState.CONNECTED or (
+            not has_ws and (not self._serial or not self._serial.is_open)
+        ):
             logger.warning("Not connected to device")
             return False
 
@@ -430,6 +485,12 @@ class HardwareBridge:
 
             message_json = json.dumps(message) + "\n"
             encoded = message_json.encode()
+
+            if has_ws:
+                async with self._write_lock:
+                    await self._ws.send_text(message_json)
+                logger.debug(f"TX(ws): {message_json.strip()}")
+                return True
 
             def _write_sync():
                 self._serial.write(encoded)

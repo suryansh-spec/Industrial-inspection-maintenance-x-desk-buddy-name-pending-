@@ -245,6 +245,37 @@ async def health_check():
 # (duplicate root route removed - the FileResponse handler above serves index.html)
 
 
+# WebSocket endpoint for the ESP32 (wireless / cloud transport)
+@app.websocket("/ws/device")
+async def device_websocket_endpoint(websocket: WebSocket):
+    """The ESP32 connects here and speaks the same JSON-lines protocol as USB serial."""
+    token = websocket.query_params.get("token", "")
+    if settings.device_token and token != settings.device_token:
+        await websocket.close(code=1008)
+        return
+
+    await websocket.accept()
+
+    async def _on_attach():
+        # Give the transport a moment to register, then prime the device like the
+        # USB auto-reconnect does.
+        await asyncio.sleep(1.0)
+        try:
+            await hardware_bridge._request_device_info()
+            companion_service.touch_device()
+            from app.services.device_settings import push_all
+
+            await push_all(hardware_bridge)
+        except Exception:
+            logger.debug("Post-attach device sync failed", exc_info=True)
+
+    sync_task = asyncio.create_task(_on_attach())
+    try:
+        await hardware_bridge.attach_websocket(websocket)
+    finally:
+        sync_task.cancel()
+
+
 # WebSocket endpoint
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):

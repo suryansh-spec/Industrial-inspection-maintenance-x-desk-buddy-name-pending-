@@ -644,9 +644,19 @@ class ActivityService:
     # ------------------------------------------------------------------
     def _sample(self, force: bool = False) -> ActivitySnapshot:
         now = datetime.now(timezone.utc)
-        app_name, window_title, pid = get_foreground_window()
-        idle_seconds = get_idle_seconds()
-        audio_active = self._detect_audio_active()
+        from app.services.remote_pc import remote_pc
+
+        if remote_pc.fresh():
+            # A PC agent is pushing its state (cloud deployment).
+            app_name = str(remote_pc.get("app", "") or "")
+            window_title = str(remote_pc.get("window", "") or "")
+            pid = int(remote_pc.get("pid", 0) or 0)
+            idle_seconds = float(remote_pc.get("idle_seconds", 0.0) or 0.0)
+            audio_active = bool(remote_pc.get("audio_active", False))
+        else:
+            app_name, window_title, pid = get_foreground_window()
+            idle_seconds = get_idle_seconds()
+            audio_active = self._detect_audio_active()
 
         activity = classify_activity(app_name, window_title, audio_active)
         if idle_seconds >= self._deep_sleep_seconds:

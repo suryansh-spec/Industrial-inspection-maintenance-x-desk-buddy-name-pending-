@@ -463,6 +463,96 @@ String serialBuffer;
 JsonDocument rxDoc;
 JsonDocument txDoc;
 
+// ----------------------------------------------------------------------------
+// Optional cloud link (WebSocket over TLS).
+// Set CLOUD_WS_HOST (+ CLOUD_WS_TOKEN) in voice_config.h, set
+// VOICE_WIFI_ALWAYS_ON to 1, and install the "WebSockets" library by Markus
+// Sattler. Every JSON line sent over USB serial is mirrored to the cloud
+// backend and every line received from the cloud is handled exactly like a
+// line from the serial port. USB serial keeps working in parallel.
+// ----------------------------------------------------------------------------
+#ifndef CLOUD_WS_HOST
+#define CLOUD_WS_HOST ""
+#endif
+#ifndef CLOUD_WS_PORT
+#define CLOUD_WS_PORT 443
+#endif
+#ifndef CLOUD_WS_TOKEN
+#define CLOUD_WS_TOKEN ""
+#endif
+#ifndef CLOUD_WS_PATH
+#define CLOUD_WS_PATH "/ws/device"
+#endif
+#if __has_include(<WebSocketsClient.h>)
+#include <WebSocketsClient.h>
+#define CLOUD_WS_ENABLED 1
+#else
+#define CLOUD_WS_ENABLED 0
+#endif
+
+void handleBackendLine(const String& line);
+
+#if CLOUD_WS_ENABLED
+WebSocketsClient cloudWs;
+bool cloudWsStarted = false;
+bool cloudWsConnected = false;
+
+void cloudWsEvent(WStype_t type, uint8_t* payload, size_t length) {
+  switch (type) {
+    case WStype_CONNECTED:
+      cloudWsConnected = true;
+      Serial.println("[cloud] connected");
+      break;
+    case WStype_DISCONNECTED:
+      if (cloudWsConnected) Serial.println("[cloud] disconnected");
+      cloudWsConnected = false;
+      break;
+    case WStype_TEXT: {
+      String line((const char*)payload, length);
+      line.trim();
+      if (line.length() > 0) handleBackendLine(line);
+      break;
+    }
+    default:
+      break;
+  }
+}
+
+void cloudTick() {
+  if (strlen(CLOUD_WS_HOST) == 0) return;
+  if (WiFi.status() != WL_CONNECTED) {
+    cloudWsConnected = false;
+    return;
+  }
+  if (!cloudWsStarted) {
+    String path = String(CLOUD_WS_PATH);
+    if (strlen(CLOUD_WS_TOKEN) > 0) path += String("?token=") + CLOUD_WS_TOKEN;
+    cloudWs.beginSSL(CLOUD_WS_HOST, CLOUD_WS_PORT, path.c_str());
+    cloudWs.onEvent(cloudWsEvent);
+    cloudWs.setReconnectInterval(3000);
+    cloudWs.enableHeartbeat(15000, 4000, 2);
+    cloudWsStarted = true;
+    Serial.printf("[cloud] connecting to %s\n", CLOUD_WS_HOST);
+  }
+  cloudWs.loop();
+}
+
+void cloudSendLine(const String& s) {
+  if (cloudWsConnected) cloudWs.sendTXT(s);
+}
+#else
+void cloudTick() {}
+void cloudSendLine(const String&) {}
+#endif
+
+// Send a JSON message to the backend over USB serial and the cloud link.
+void sendTx(JsonDocument& doc) {
+  String s;
+  serializeJson(doc, s);
+  Serial.println(s);
+  cloudSendLine(s);
+}
+
 const int BUTTON_PINS[5] = {
   PIN_BTN_MODE, PIN_BTN_VOICE, PIN_BTN_UP, PIN_BTN_DOWN, PIN_BTN_SELECT
 };
@@ -1571,8 +1661,7 @@ void sendHeartbeat() {
   txDoc["bme"] = sensors.bmeOk;
   txDoc["adxl"] = sensors.adxlOk;
   txDoc["mic"] = sensors.micOk;
-  serializeJson(txDoc, Serial);
-  Serial.println();
+  sendTx(txDoc);
 }
 
 void sendSensorData() {
@@ -1595,8 +1684,7 @@ void sendSensorData() {
     accel["z"] = sensors.accelZ;
   }
 
-  serializeJson(txDoc, Serial);
-  Serial.println();
+  sendTx(txDoc);
 }
 
 void sendInspectionData() {
@@ -1614,8 +1702,7 @@ void sendInspectionData() {
   data["sample_rate_hz"] = 40;  // ~40 Hz sampling
   data["method"] = "cnn";
 
-  serializeJson(txDoc, Serial);
-  Serial.println();
+  sendTx(txDoc);
 }
 
 void sendButton(const char* button) {
@@ -1624,16 +1711,14 @@ void sendButton(const char* button) {
   txDoc["button"] = button;
   txDoc["page"] = pageName(page);
   txDoc["mode"] = modeName();
-  serializeJson(txDoc, Serial);
-  Serial.println();
+  sendTx(txDoc);
 }
 
 void sendMusicAction(const char* action) {
   txDoc.clear();
   txDoc["type"] = "music";
   txDoc["action"] = action;
-  serializeJson(txDoc, Serial);
-  Serial.println();
+  sendTx(txDoc);
 }
 
 void sendPomodoroAction(const char* action) {
@@ -1641,24 +1726,21 @@ void sendPomodoroAction(const char* action) {
   txDoc["type"] = "pomodoro";
   txDoc["action"] = action;
   txDoc["minutes"] = POMODORO_WORK_SECONDS / 60;
-  serializeJson(txDoc, Serial);
-  Serial.println();
+  sendTx(txDoc);
 }
 
 void sendNotificationAck(const char* id) {
   txDoc.clear();
   txDoc["type"] = "notification_ack";
   txDoc["id"] = id;
-  serializeJson(txDoc, Serial);
-  Serial.println();
+  sendTx(txDoc);
 }
 
 void sendModeSwitched() {
   txDoc.clear();
   txDoc["type"] = "mode_switched";
   txDoc["mode"] = modeName();
-  serializeJson(txDoc, Serial);
-  Serial.println();
+  sendTx(txDoc);
 }
 
 void sendGesture(const char* gesture) {
@@ -1667,8 +1749,7 @@ void sendGesture(const char* gesture) {
   txDoc["gesture"] = gesture;
   txDoc["page"] = pageName(page);
   txDoc["mode"] = modeName();
-  serializeJson(txDoc, Serial);
-  Serial.println();
+  sendTx(txDoc);
 }
 
 // ----------------------------------------------------------------------------
@@ -2918,8 +2999,7 @@ void voiceSendStatus() {
   txDoc["server"] = voiceServerUrl;
   txDoc["heap"] = ESP.getFreeHeap();
   txDoc["psram"] = ESP.getFreePsram();
-  serializeJson(txDoc, Serial);
-  Serial.println();
+  sendTx(txDoc);
 }
 
 bool voiceEnsureWifi() {
@@ -3365,8 +3445,7 @@ void setup() {
   txDoc["bme"] = sensors.bmeOk;
   txDoc["adxl"] = sensors.adxlOk;
   txDoc["mic"] = sensors.micOk;
-  serializeJson(txDoc, Serial);
-  Serial.println();
+  sendTx(txDoc);
   Serial.println("[boot] setup complete");
   Serial.flush();
 }
@@ -3375,6 +3454,7 @@ void loop() {
   unsigned long now = millis();
 
   readSerial();
+  cloudTick();
   voiceTick(now);
 
   if (!voiceIsCapturing()) {

@@ -513,6 +513,26 @@ class CompanionService:
     # ------------------------------------------------------------------
     def _music_dict(self) -> Dict[str, Any]:
         try:
+            from app.services.remote_pc import remote_pc
+
+            remote_music = remote_pc.get("music") if remote_pc.fresh() else None
+            if isinstance(remote_music, dict) and remote_music:
+                base = {
+                    "playing": False,
+                    "title": "",
+                    "artist": "",
+                    "album": "",
+                    "progress_ms": 0,
+                    "duration_ms": 0,
+                    "volume": 50,
+                    "provider": "remote",
+                }
+                base.update(remote_music)
+                return base
+        except Exception:
+            pass
+
+        try:
             from app.services.music import music_controller
 
             return _dataclass_dict(music_controller.get_status())
@@ -529,12 +549,23 @@ class CompanionService:
             }
 
     def _metrics_dict(self) -> Dict[str, Any]:
+        metrics: Dict[str, Any] = {}
         try:
-            from app.services.system_monitor import system_monitor
+            from app.services.remote_pc import remote_pc
 
-            metrics = system_monitor.get_metrics() or {}
+            remote_metrics = remote_pc.get("metrics") if remote_pc.fresh() else None
+            if isinstance(remote_metrics, dict) and remote_metrics:
+                metrics = remote_metrics
         except Exception:
             metrics = {}
+
+        if not metrics:
+            try:
+                from app.services.system_monitor import system_monitor
+
+                metrics = system_monitor.get_metrics() or {}
+            except Exception:
+                metrics = {}
 
         return {
             "cpu_percent": metrics.get("cpu_percent"),

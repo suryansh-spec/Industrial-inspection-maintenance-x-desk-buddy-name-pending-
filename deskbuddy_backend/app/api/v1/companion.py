@@ -5,15 +5,50 @@ Exposes the PC-context/expression state used by the OLED face and the TFT
 dashboard. The same state is broadcast over ``/ws`` on the
 ``deskbuddy_state`` channel and pushed over serial to the ESP32.
 """
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from app.core.config import settings
 from app.services.activity import Expression
 from app.services.companion import companion_service
+from app.services.remote_pc import remote_pc
 
 router = APIRouter(prefix="/companion", tags=["companion"])
+
+
+class PCStateRequest(BaseModel):
+    """PC state pushed by ``pc_agent/pc_agent.py`` when the backend runs in the cloud."""
+
+    app: str = ""
+    window: str = ""
+    pid: int = 0
+    idle_seconds: float = 0.0
+    audio_active: bool = False
+    metrics: Optional[Dict[str, Any]] = None
+    music: Optional[Dict[str, Any]] = None
+
+
+@router.post("/pc-state")
+async def push_pc_state(
+    request: PCStateRequest,
+    x_agent_token: Optional[str] = Header(default=None),
+):
+    """Receive the PC's foreground app, idle time, metrics and music from the PC agent."""
+
+    if settings.agent_token and x_agent_token != settings.agent_token:
+        raise HTTPException(status_code=401, detail="Invalid agent token")
+    remote_pc.update(request.model_dump())
+    companion_service.activity.touch_heartbeat()
+    return {"status": "ok"}
+
+
+@router.get("/pc-state")
+async def get_pc_state():
+    """Debug view of the last state pushed by the PC agent."""
+
+    return remote_pc.snapshot()
 
 
 class EmotionRequest(BaseModel):

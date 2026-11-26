@@ -120,6 +120,13 @@ class Settings(BaseSettings):
     
     # Feature Flags
     enable_hardware_bridge: bool = True
+
+    # Wireless device link: shared secret the ESP32 sends as ?token=... on /ws/device.
+    # Empty means no token is required (fine locally, set it on a public deployment).
+    device_token: str = ""
+
+    # PC agent push: shared secret for POST /companion/pc-state (empty = open).
+    agent_token: str = ""
     
     # Logging
     log_level: str = "INFO"
