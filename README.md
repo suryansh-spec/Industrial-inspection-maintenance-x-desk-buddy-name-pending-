@@ -153,20 +153,39 @@ Dashboard · Expressions · Buttons · Notifications · Sensor Graphs · Inspect
 
 ---
 
-## Quick Start
+## Quick Start (Clone & Run on Any Laptop)
 
-### 1. Backend
+### Option A — One-Click Windows Setup & Launch
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/suryansh-spec/Industrial-inspection-maintenance-x-desk-buddy-name-pending-.git
+   cd Industrial-inspection-maintenance-x-desk-buddy-name-pending-
+   ```
+2. **Run First-Time Setup:** Double-click **`Setup_Omnipect.bat`**
+   - Automatically creates `deskbuddy_backend/.env` from `.env.example` and `firmware/arduino/DeskBuddy_Companion/voice_config.h` from `voice_config.example.h`.
+   - Auto-discovers your Conda `inspection` environment or creates a local `.venv` and installs all dependencies from `deskbuddy_backend/requirements.txt`.
+3. **Add Your API Key:** Open `deskbuddy_backend/.env` and set `NVIDIA_API_KEY=nvapi-...` (for Nemotron Voice Agent).
+4. **Launch Omnipect:** Double-click **`Start_Omnipect.bat`** (or **`Start_Omnipect_Silent.vbs`** for background mode).
+   - Opens the Web Control Panel automatically at **http://127.0.0.1:8080/**
+   - Auto-detects the ESP32-S3 USB COM port when plugged in.
+
+### Option B — Manual CLI Setup (venv or Conda)
 ```bash
+# Using Conda:
+conda env create -f environment.yml
+conda activate inspection
+
+# Or using Python venv:
 cd deskbuddy_backend
-python -m venv venv
-venv\Scripts\activate  # Windows
+python -m venv .venv
+.venv\Scripts\activate  # Windows
 pip install -r requirements.txt
-cp .env.example .env   # edit COM port, API keys, etc.
+
+cp .env.example .env    # Edit NVIDIA_API_KEY
 python -m app.main
 ```
-- API: http://127.0.0.1:8080
-- Docs: http://127.0.0.1:8080/docs
-- Web panel: http://127.0.0.1:8080/
+- **Web Dashboard & Voice Agent:** http://127.0.0.1:8080/
+- **Swagger API Docs:** http://127.0.0.1:8080/docs
 
 ### 2. Firmware (Arduino IDE)
 1. Open `firmware/arduino/DeskBuddy_Companion/DeskBuddy_Companion.ino`

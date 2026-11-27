@@ -14,11 +14,14 @@ def set_cell_margins(cell, top=100, bottom=100, left=150, right=150):
     tcMar = parse_xml(f'<w:tcMar {nsdecls("w")}><w:top w:w="{top}" w:type="dxa"/><w:bottom w:w="{bottom}" w:type="dxa"/><w:left w:w="{left}" w:type="dxa"/><w:right w:w="{right}" w:type="dxa"/></w:tcMar>')
     tcPr.append(tcMar)
 
+from pathlib import Path
+
 def create_document():
-    template_path = 'C:/Users/Suryansh3584/Downloads/IRJMETSTemplate.docx'
-    output_path = 'e:/VSCODE/multimodel_inspection_desk_buddy/docs/research_paper/IRJMETS_OmniDesk_Paper.docx'
+    repo_root = Path(__file__).resolve().parent.parent
+    template_path = repo_root / 'docs' / 'research_paper' / 'IRJMETS_OmniDesk_Paper.docx'
+    output_path = repo_root / 'docs' / 'research_paper' / 'IRJMETS_OmniDesk_Paper.docx'
     
-    doc = docx.Document(template_path)
+    doc = docx.Document(str(template_path)) if template_path.exists() else docx.Document()
     
     # Remove existing tables in template body (sample displacement table)
     for t in list(doc.tables):

@@ -19,8 +19,8 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8080
     
-    # Database
-    database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/deskbuddy"
+    # Database (defaults to zero-config local SQLite so fresh clones run immediately)
+    database_url: str = "sqlite+aiosqlite:///./data/app.db"
     database_pool_size: int = 10
     database_max_overflow: int = 20
     
@@ -50,7 +50,7 @@ class Settings(BaseSettings):
     
     # Voice Assistant (Nemotron)
     nvidia_api_key: Optional[str] = None
-    nemotron_model: str = "nvidia/nemotron-4-340b-instruct"
+    nemotron_model: str = "nvidia/nemotron-3-ultra-550b-a55b"
     nemotron_base_url: str = "https://integrate.api.nvidia.com/v1"
     voice_timeout: float = 60.0
     voice_disable_thinking: bool = True

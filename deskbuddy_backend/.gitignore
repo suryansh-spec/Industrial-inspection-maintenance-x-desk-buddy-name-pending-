@@ -27,16 +27,20 @@ logs/
 *.sqlite
 *.sqlite3
 
-# Models
-/models/
-*.pth
+# Models (keep committed models in /models/ and bearing_fault_desk_buddy/artifacts/)
 *.pt
 *.onnx
+!models/*.pth
+!bearing_fault_desk_buddy/artifacts/*.pth
+!bearing_fault_desk_buddy/artifacts/*.json
 
 # Data
 data/
 *.csv
 *.json
+!plugins.json
+!app/plugins/*/manifest.json
+!bearing_fault_desk_buddy/artifacts/*.json
 
 # Build
 build/

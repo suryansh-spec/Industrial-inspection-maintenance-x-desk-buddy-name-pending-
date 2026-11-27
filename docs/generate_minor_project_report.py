@@ -6,12 +6,15 @@ from docx.enum.table import WD_TABLE_ALIGNMENT, WD_ALIGN_VERTICAL
 from docx.oxml import OxmlElement, parse_xml
 from docx.oxml.ns import nsdecls, qn
 
+from pathlib import Path
+
 def create_report():
-    output_dir = r"e:\VSCODE\multimodel_inspection_desk_buddy\docs\minor_project_report"
+    repo_root = Path(__file__).resolve().parent.parent
+    output_dir = str(repo_root / "docs" / "minor_project_report")
     os.makedirs(output_dir, exist_ok=True)
     output_docx = os.path.join(output_dir, "Minor_Project_Report_OmniDesk.docx")
 
-    report_assets_dir = r"e:\VSCODE\multimodel_inspection_desk_buddy\docs\report_assets"
+    report_assets_dir = str(repo_root / "docs" / "report_assets")
     logo_path = os.path.join(report_assets_dir, "extracted_page5_img1.jpeg")
     
     # Newly provided high-resolution architecture diagrams
@@ -23,7 +26,7 @@ def create_report():
     d6_bridge_path = os.path.join(report_assets_dir, "Diagram 6Desktop Bridge & Workstation Telemetry Pipeline.png")
 
     # ML Benchmark artifacts
-    artifacts_dir = r"e:\VSCODE\multimodel_inspection_desk_buddy\deskbuddy_backend\bearing_fault_desk_buddy\artifacts"
+    artifacts_dir = str(repo_root / "deskbuddy_backend" / "bearing_fault_desk_buddy" / "artifacts")
     f_class_dist = os.path.join(artifacts_dir, "01_class_distribution.png")
     f_waveforms = os.path.join(artifacts_dir, "02_time_domain_waveforms.png")
     f_train_curves = os.path.join(artifacts_dir, "10_training_curves.png")

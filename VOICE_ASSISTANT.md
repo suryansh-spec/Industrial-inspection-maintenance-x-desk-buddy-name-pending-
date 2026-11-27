@@ -54,9 +54,9 @@ The MAX98357A is **not yet wired** on the bench. Firmware code for the amp is pr
 The voice stack lives in the `inspection` conda environment:
 
 ```powershell
-# From the repo root
+# From the repo root (using conda env 'inspection' or .venv)
 cd deskbuddy_backend
-C:\Users\Suryansh3584\.conda\envs\inspection\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8080
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8080
 ```
 
 Bind `0.0.0.0` so the ESP32 on the LAN can reach port 8080. Startup takes ~20 s (Whisper model loads lazily on first request; the ~75 MB `tiny.en` model downloads once from Hugging Face and is cached at `%USERPROFILE%\.cache\huggingface\hub\models--Systran--faster-whisper-tiny.en`).
@@ -79,7 +79,7 @@ TTS_VOICE=en-US-ChristopherNeural
 The conda-pinned `numpy`/`scipy` link against an MKL 2026.1.0 shim that crashes on the first float32 matmul (`0xC06D007F` in KERNELBASE) — this is what killed the first E2E run. Fix (applied to the `inspection` env):
 
 ```powershell
-C:\Users\Suryansh3584\.conda\envs\inspection\python.exe -m pip install --force-reinstall --no-deps "numpy==2.1.3" "scipy==1.14.1"
+python -m pip install --force-reinstall --no-deps "numpy==2.1.3" "scipy==1.14.1"
 ```
 
 These PyPI wheels ship self-contained OpenBLAS and do not conflict with MKL/CT2. Verified: `faster-whisper` transcribes `test_question.wav` in ~0.7 s both `float32` and `int8`.

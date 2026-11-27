@@ -50,10 +50,13 @@ dependencies = [
     "python-dateutil==2.9.0",
     "pillow>=10.0.0",
     "pandas>=2.0.0",
-    # Voice assistant: local Whisper STT + edge-tts neural TTS
+    "aiosqlite==0.20.0",
+    "requests>=2.31.0",
+    # Voice assistant: local Whisper STT + edge-tts neural TTS + speaker playback
     "faster-whisper>=1.2.0",
     "edge-tts>=7.0.0",
     "soundfile>=0.13.0",
+    "sounddevice>=0.5.0",
     "onnxruntime>=1.17.0",
     "numpy>=1.24",
     "scipy>=1.10",

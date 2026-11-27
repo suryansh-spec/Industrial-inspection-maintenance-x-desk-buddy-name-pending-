@@ -213,10 +213,10 @@ class HardwareBridge:
         """Auto-detect device port."""
         ports = serial.tools.list_ports.comports()
         for port in ports:
-            # Filter for common ESP32/Arduino VID/PID
-            if port.vid in [0x2341, 0x1A86, 0x10C4, 0x0403]:  # Arduino, CH340, CP2102, FTDI
+            # Filter for common ESP32/Arduino VID/PID (Arduino, CH340, CP2102, FTDI, Espressif USB CDC)
+            if port.vid in [0x2341, 0x1A86, 0x10C4, 0x0403, 0x303A]:
                 return port.device
-            if "USB" in port.description or "UART" in port.description:
+            if "USB" in port.description or "UART" in port.description or "ESP32" in port.description:
                 return port.device
         return None
     
