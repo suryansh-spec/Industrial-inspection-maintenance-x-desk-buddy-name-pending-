@@ -1,5 +1,5 @@
 @echo off
-title Omnipect - One-Click Setup (Clone Ready)
+title Omnipect - One-Click Setup
 set "ROOT_DIR=%~dp0"
 cd /d "%ROOT_DIR%"
 
@@ -8,24 +8,26 @@ echo   Omnipect - Automated First-Time Setup
 echo ============================================================
 
 :: 1. Ensure deskbuddy_backend/.env exists
-if not exist "%ROOT_DIR%deskbuddy_backend\.env" (
-    echo [1/4] Creating deskbuddy_backend\.env from .env.example...
-    copy /Y "%ROOT_DIR%deskbuddy_backend\.env.example" "%ROOT_DIR%deskbuddy_backend\.env" >nul
-    echo       IMPORTANT: Edit deskbuddy_backend\.env and add your NVIDIA_API_KEY
-) else (
-    echo [1/4] deskbuddy_backend\.env already exists.
-)
+if exist "%ROOT_DIR%deskbuddy_backend\.env" goto :env_done
+echo [1/4] Creating deskbuddy_backend\.env from .env.example...
+copy /Y "%ROOT_DIR%deskbuddy_backend\.env.example" "%ROOT_DIR%deskbuddy_backend\.env" >nul
+echo       IMPORTANT: Edit deskbuddy_backend\.env and add your NVIDIA_API_KEY
+goto :voice_cfg
+:env_done
+echo [1/4] deskbuddy_backend\.env already exists.
 
+:voice_cfg
 :: 2. Ensure firmware voice_config.h exists
-if not exist "%ROOT_DIR%firmware\arduino\DeskBuddy_Companion\voice_config.h" (
-    if exist "%ROOT_DIR%firmware\arduino\DeskBuddy_Companion\voice_config.example.h" (
-        echo [2/4] Creating firmware voice_config.h from voice_config.example.h...
-        copy /Y "%ROOT_DIR%firmware\arduino\DeskBuddy_Companion\voice_config.example.h" "%ROOT_DIR%firmware\arduino\DeskBuddy_Companion\voice_config.h" >nul
-    )
-) else (
-    echo [2/4] firmware voice_config.h already exists.
+if exist "%ROOT_DIR%firmware\arduino\DeskBuddy_Companion\voice_config.h" goto :voice_cfg_done
+if exist "%ROOT_DIR%firmware\arduino\DeskBuddy_Companion\voice_config.example.h" (
+    echo [2/4] Creating firmware voice_config.h from voice_config.example.h...
+    copy /Y "%ROOT_DIR%firmware\arduino\DeskBuddy_Companion\voice_config.example.h" "%ROOT_DIR%firmware\arduino\DeskBuddy_Companion\voice_config.h" >nul
 )
+goto :find_py
+:voice_cfg_done
+echo [2/4] firmware voice_config.h already exists.
 
+:find_py
 :: 3. Discover or create Python environment
 set "PYTHON_EXE="
 if exist "%ROOT_DIR%.venv\Scripts\python.exe" set "PYTHON_EXE=%ROOT_DIR%.venv\Scripts\python.exe"
@@ -35,21 +37,22 @@ if not defined PYTHON_EXE if exist "%USERPROFILE%\anaconda3\envs\inspection\pyth
 if not defined PYTHON_EXE if exist "C:\ProgramData\miniconda3\envs\inspection\python.exe" set "PYTHON_EXE=C:\ProgramData\miniconda3\envs\inspection\python.exe"
 if not defined PYTHON_EXE if exist "C:\ProgramData\anaconda3\envs\inspection\python.exe" set "PYTHON_EXE=C:\ProgramData\anaconda3\envs\inspection\python.exe"
 
-if not defined PYTHON_EXE (
-    echo [3/4] Creating local virtual environment (.venv)...
-    python -m venv "%ROOT_DIR%.venv"
-    if exist "%ROOT_DIR%.venv\Scripts\python.exe" (
-        set "PYTHON_EXE=%ROOT_DIR%.venv\Scripts\python.exe"
-    ) else (
-        set "PYTHON_EXE=python"
-    )
+if defined PYTHON_EXE goto :py_found
+echo [3/4] Creating local virtual environment in .venv ...
+python -m venv "%ROOT_DIR%.venv"
+if exist "%ROOT_DIR%.venv\Scripts\python.exe" (
+    set "PYTHON_EXE=%ROOT_DIR%.venv\Scripts\python.exe"
 ) else (
-    echo [3/4] Found existing Python environment: %PYTHON_EXE%
+    set "PYTHON_EXE=python"
 )
+goto :install_deps
 
+:py_found
+echo [3/4] Found existing Python environment: %PYTHON_EXE%
+
+:install_deps
 :: 4. Install dependencies
-echo [4/4] Installing Omnipect backend and voice agent dependencies...
-"%PYTHON_EXE%" -m pip install --upgrade pip
+echo [4/4] Verifying Omnipect backend and voice agent dependencies...
 "%PYTHON_EXE%" -m pip install -r "%ROOT_DIR%deskbuddy_backend\requirements.txt"
 
 echo.
